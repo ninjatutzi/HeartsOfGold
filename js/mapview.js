@@ -218,12 +218,12 @@ window.HOG = window.HOG || {};
         if (c[0] < vx0 || c[0] > vx1 || c[1] < vy0 || c[1] > vy1) continue;
         ctx.save(); ctx.translate(c[0], c[1]); ctx.scale(1 / z, 1 / z);
         if (p.city) {
-          const sz = 2.5 + (p.city.size || 1) * 1.5;
+          const sz = 1.6 + (p.city.size || 1) * 0.9;
           ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.2;
           ctx.beginPath(); ctx.rect(-12 - sz, 12 - sz, sz * 2, sz * 2); ctx.fill(); ctx.stroke();
           if (z > 2.2) { ctx.font = '10px sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2.5; ctx.strokeText(p.city.name, -12 - sz - 3, 15); ctx.fillText(p.city.name, -12 - sz - 3, 15); }
         }
-        if (p.port) { ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2.5; ctx.strokeText('⚓', 12, 12); ctx.fillText('⚓', 12, 12); }
+        if (p.port && z > 1.1) { ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2.5; ctx.strokeText('⚓', 12, 12); ctx.fillText('⚓', 12, 12); }
         ctx.restore();
       }
     }

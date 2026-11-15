@@ -29,6 +29,7 @@ window.HOG = window.HOG || {};
       const sim = new Sim(world, g);
       for (const tag in world.countries) {
         g.c[tag] = { money: 300, manpower: 0, equip: { rifles: 30, guns: 8 }, imports: {}, research: { done: [], cur: [], prog: {} }, lines: [], train: [], build: [], lawDay: -999 };
+        if (world.startTechs) { g.c[tag].research.done = world.startTechs.slice(); sim.recalcMods(tag); }
         const st = sim.stats(tag);
         g.c[tag].manpower = Math.round(st.manCap * 0.6);
         const provs = [];
@@ -186,10 +187,10 @@ window.HOG = window.HOG || {};
       s.units = 0; s.upkeep = 0;
       this.g.units.forEach((u) => { if (u.owner === tag) { s.units++; s.upkeep += D.UNITS[u.type].upkeep; } });
       s.civWork = civW * (1 + m.civ);
-      s.pp = milW * 0.8 * ideo.prod * this.policyMod(tag, 'prod', 1) * (1 + m.mil);
+      s.pp = milW * D.PP_SCALE * ideo.prod * this.policyMod(tag, 'prod', 1) * (1 + m.mil);
       s.ppPerFac = s.mil ? s.pp / s.mil : 0;
       RES.forEach((r) => (s.res[r] = resW[r] * (1 + m.resource)));
-      s.rp = (1 + s.gdp / 600) * ideo.research * this.policyMod(tag, 'research', 1) * (1 + m.research);
+      s.rp = D.RESEARCH_SCALE * (1 + s.gdp / 600) * ideo.research * this.policyMod(tag, 'research', 1) * (1 + m.research);
       s.manCap = s.popEff * law.pct * (1 + m.manpower) * ideo.manpower;
       s.manRegen = s.manCap * 0.006;
       // Ressourcen wie in HOI4: Summe aller Ressourcen = Angebot pro Tag (+ Importe), Fabriken verbrauchen davon
@@ -313,7 +314,7 @@ window.HOG = window.HOG || {};
       if (d.naval && !this.portAvailable(tag)) return 'Schiffe brauchen einen Hafen.';
       if (c.train.length >= 30) return 'Ausbildungswarteschlange voll.';
       c.equip[d.eq] -= d.n; c.manpower -= d.manpower;
-      c.train.push({ id: this.g.nextId++, type, left: d.train });
+      c.train.push({ id: this.g.nextId++, type, left: Math.round(d.train * D.TRAIN_SCALE) });
       return null;
     }
     techAvailable(tag, t) {
@@ -558,7 +559,7 @@ window.HOG = window.HOG || {};
       this.g.units.forEach((u) => {
         if (!u.path.length) return;
         const kind = this.kindOf(u);
-        u.prog += this.stat(u, 'speed') * (this.terrain(u.path[0]).move || 1);
+        u.prog += this.stat(u, 'speed') * D.MOVE_SCALE * (this.terrain(u.path[0]).move || 1);
         while (u.path.length) {
           const next = u.path[0];
           if (!this.canStep(u.owner, kind, u.prov, next)) { u.path = []; u.prog = 0; break; }
@@ -648,6 +649,12 @@ window.HOG = window.HOG || {};
       for (const tag in this.world.countries) {
         if (this.g.dead[tag]) continue;
         if (this.ctrlStates(tag).length === 0) {
+          // Land kontrolliert nichts mehr: automatische Kapitulation – jeder Besatzer annektiert, was er hält
+          const occ = {};
+          this.ownedStates(tag).forEach((s) => { if (s.occupier !== tag) (occ[s.occupier] = occ[s.occupier] || []).push(s.id); });
+          for (const o in occ) this.makePeace(o, tag, occ[o]);
+        }
+        if (this.ctrlStates(tag).length === 0 && this.ownedStates(tag).length === 0) {
           this.g.dead[tag] = true; changed = true;
           this.g.units = this.g.units.filter((u) => u.owner !== tag);
           this.logMsg('☠️ ' + this.world.countries[tag].name + ' wurde vollständig besetzt und existiert nicht mehr!', [tag]);
@@ -659,8 +666,76 @@ window.HOG = window.HOG || {};
       if (!this.g.over && alive.length === 1 && alive[0] === this.g.player) this.g.over = 'won';
     }
 
-    dateStr(day) {
-      const d = new Date(Date.UTC(1936, 0, 1) + (day === undefined ? this.g.day : day) * 86400000);
+    // ---------- Bündnisse ----------
+    alliance(tag) { return this.world.alliances.find((a) => a.members.includes(tag)); }
+    requestAlliance(a, b) {
+      if (a === b || this.allied(a, b)) return { ok: false, msg: 'Ihr seid bereits verbündet.' };
+      if (this.atWar(a, b)) return { ok: false, msg: 'Ihr befindet euch im Krieg.' };
+      const A = this.alliance(a), B = this.alliance(b);
+      if (A && B) return { ok: false, msg: this.country(b).name + ' ist bereits in einem anderen Bündnis (' + B.name + ').' };
+      const mem = (al) => (al ? al.members : []);
+      if (mem(B).some((m) => this.atWar(a, m)) || mem(A).some((m) => this.atWar(b, m))) return { ok: false, msg: 'Ein Bündnispartner befindet sich im Krieg mit der anderen Seite.' };
+      const ea = this.enemies(a), eb = this.enemies(b);
+      const common = ea.some((x) => eb.includes(x));
+      const ca = this.country(a), cb = this.country(b);
+      let score = (ca.ideology === cb.ideology ? 2 : 0) + (common ? 3 : 0) + (this.strength(a) > this.strength(b) * 0.7 ? 1 : 0);
+      if (ca.ideology !== cb.ideology && ((ca.ideology === 'communist') !== (cb.ideology === 'communist'))) score -= 2;
+      if (score < 2) return { ok: false, msg: cb.name + ' lehnt ab. (Gemeinsame Feinde oder gleiche Ideologie helfen.)' };
+      let al = A || B;
+      if (!al) { al = { id: 'a' + this.g.nextId++, name: 'Bündnis ' + ca.name + '–' + cb.name, members: [a] }; this.world.alliances.push(al); }
+      [a, b].forEach((t) => { if (!al.members.includes(t)) al.members.push(t); });
+      // laufende Kriege des Partners: dieselbe Seite
+      this.g.wars.forEach((w) => {
+        [[a, b], [b, a]].forEach(([from, to]) => {
+          const side = w.attackers.includes(from) ? w.attackers : w.defenders.includes(from) ? w.defenders : null;
+          const other = side === w.attackers ? w.defenders : w.attackers;
+          if (side && !side.includes(to) && !other.includes(to)) side.push(to);
+        });
+      });
+      this.logMsg('🤝 ' + ca.name + ' und ' + cb.name + ' schließen ein Bündnis (' + al.name + ').', [a, b]);
+      return { ok: true, msg: cb.name + ' nimmt das Bündnis an!' };
+    }
+    leaveAlliance(tag) {
+      const al = this.alliance(tag); if (!al) return;
+      al.members = al.members.filter((m) => m !== tag);
+      this.logMsg(this.country(tag).name + ' verlässt das Bündnis ' + al.name + '.', [tag]);
+    }
+
+    // ---------- Friedenskonferenz (mehrere Parteien gegen einen Gegner) ----------
+    conferenceInfo(target) {
+      const participants = this.enemies(target);
+      const states = this.ownedStates(target).filter((s) => s.occupier !== s.owner && participants.includes(s.occupier));
+      return { participants, states };
+    }
+    evalConference(target, assign, proposer) {
+      const info = this.conferenceInfo(target);
+      let tot = 0, lost = 0; this.ownedStates(target).forEach((s) => { tot += s.gdp; });
+      info.states.forEach((s) => { lost += s.gdp; });
+      const annexed = info.states.filter((s) => assign[s.id]);
+      if (annexed.length) {
+        if (tot && lost / tot < 0.2) return { ok: false, msg: this.country(target).name + ': Wir sind nicht besiegt – niemals! (Mind. 20 % unseres BIP müssen besetzt sein.)' };
+      } else {
+        const days = this.g.day - this.warStart(proposer, target);
+        const back = this.lostShare(proposer, target);
+        if (!(lost / (tot || 1) >= 0.1 || (days >= 40 && lost / (tot || 1) + 0.05 >= back))) return { ok: false, msg: this.country(target).name + ': Wir haben die Oberhand – kein Frieden.' };
+      }
+      for (const x of info.participants) {
+        if (x === proposer) continue;
+        let occ = 0, recv = 0;
+        info.states.forEach((s) => { if (s.occupier === x) occ += s.gdp; if (assign[s.id] === x) recv += s.gdp; });
+        if (occ > 0 && recv < occ * 0.7) return { ok: false, msg: this.country(x).name + ' akzeptiert diese Aufteilung nicht (sie halten mehr besetzt, als sie bekommen).' };
+      }
+      return { ok: true, msg: this.country(target).name + ' stimmt dem Friedensvertrag zu.' };
+    }
+    applyConference(target, assign) {
+      const info = this.conferenceInfo(target), per = {};
+      info.states.forEach((s) => { const r = assign[s.id]; if (r) { s.occupier = r; (per[r] = per[r] || []).push(s.id); } });
+      info.participants.forEach((x) => this.makePeace(x, target, per[x] || []));
+    }
+
+        dateStr(day) {
+      const sd = (this.world.startDate || D.START_DATE).split('-').map(Number);
+      const d = new Date(Date.UTC(sd[0], sd[1] - 1, sd[2]) + (day === undefined ? this.g.day : day) * 86400000);
       return d.getUTCDate() + '.' + (d.getUTCMonth() + 1) + '.' + d.getUTCFullYear();
     }
   }

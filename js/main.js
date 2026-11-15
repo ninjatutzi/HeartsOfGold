@@ -23,7 +23,10 @@ window.HOG = window.HOG || {};
   // ---------- Welten ----------
   app.worldList = function () {
     const saved = U.storage.get(WK, {});
-    return [{ key: '__default', name: '🌍 Mitteleuropa 1936 (Beispielwelt)', make: () => H.worldgen.defaultWorld() }]
+    const builtin = [];
+    if (H.worlds && H.worlds.europe2020) builtin.push({ key: '__eu2020', name: '🌍 Europa 2020 (Natural-Earth-Grenzen)', make: () => U.clone(H.worlds.europe2020) });
+    builtin.push({ key: '__default', name: '🌍 Mitteleuropa 1936 (Beispielwelt)', make: () => H.worldgen.defaultWorld() });
+    return builtin
       .concat(Object.keys(saved).map((k) => ({ key: k, name: '💾 ' + k, make: () => saved[k] })));
   };
   app.saveWorld = function (world) {
@@ -119,7 +122,8 @@ window.HOG = window.HOG || {};
   app.editorDialog = function () {
     const body = h('div', { class: 'col' },
       h('button', { onclick: () => { U.closeModal(); app.openEditor(H.worldgen.emptyWorld()); } }, '📄 Neue leere Welt'),
-      h('button', { onclick: () => { U.closeModal(); app.openEditor(H.worldgen.defaultWorld()); } }, '🌍 Beispielwelt bearbeiten'),
+      H.worlds && H.worlds.europe2020 ? h('button', { onclick: () => { U.closeModal(); app.openEditor(U.clone(H.worlds.europe2020)); } }, '🌍 Europa 2020 bearbeiten') : '',
+      h('button', { onclick: () => { U.closeModal(); app.openEditor(H.worldgen.defaultWorld()); } }, '🌍 Mitteleuropa 1936 bearbeiten'),
       h('button', { onclick: () => { U.closeModal(); app.loadWorldDialog((w) => app.openEditor(w)); } }, '💾 Gespeicherte Welt laden'),
       h('button', { onclick: async () => { const d = await U.pickFile(); if (d && d.provinces) { U.closeModal(); app.openEditor(d); } else if (d) alert('Keine Welt-Datei.'); } }, '⬆ Welt aus Datei'));
     U.modal('Map-Maker', body, [{ label: 'Abbrechen' }]);
@@ -139,6 +143,7 @@ window.HOG = window.HOG || {};
         h('li', null, 'Produktion: Rüstungsfabriken werden auf Ausrüstungslinien verteilt (Gewehre, Geschütze, Panzer, Flugzeuge, Schiffsrümpfe). Jede Fabrik verbraucht Ressourcen pro Tag aus der Gesamtsumme deines Landes – fehlt etwas, sinkt der Ausstoß. Fehlendes kannst du importieren.'),
         h('li', null, 'Truppen werden aus Ausrüstung + Manpower ausgebildet. Die Mannstärke-Regel (Reiter "Land") legt fest, wie viel Bevölkerung rekrutierbar ist – und was das die Wirtschaft kostet.'),
         h('li', null, 'Terrain (Wald, Hügel, Gebirge, Sumpf, Wüste) ändert Verteidigung, Angriff und Tempo. Landtruppen schiffen sich in Häfen ein, fahren dann als Transportschiffe über Wasser; Zerstörer, Kreuzer, Schlachtschiffe werden in Häfen gebaut.'),
+        h('li', null, 'Diplomatie: Bündnisse kannst du anfragen (KI stimmt bei gleicher Ideologie oder gemeinsamen Feinden zu). Bei einer Kriegserklärung gegen dich erscheint ein Popup, oben mittig siehst du, wer mit und gegen dich kämpft. Frieden läuft als Konferenz: Alle, die gegen denselben Gegner kämpfen, schließen gemeinsam Frieden und teilen die besetzten Staaten auf. Kontrolliert ein Land nichts mehr, kapituliert es automatisch.'),
         h('li', null, 'Staaten haben Besitzer und Okkupant. Im Frieden sind beide gleich; besetzte Staaten kannst du im Friedensschluss annektieren.'),
         h('li', null, 'Minderheiten, die nicht "integriert" sind, erzeugen Unruhe und senken BIP/Produktion. Die Regel "Ethnische Unterdrückung" beseitigt sie schneller, erhöht aber das Chaos.')),
       h('h4', null, 'Map-Maker'),

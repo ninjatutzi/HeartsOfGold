@@ -2,6 +2,9 @@
 
 Eine 2D-Version eines Grand-Strategy-Spiels (inspiriert von HOI4), komplett im Browser – ohne Build-Schritt.
 
+**Welten:** *Europa 2020* (echte Länderumrisse aus Natural Earth, 39 Länder, ~300 Staaten, ~630 Land- und 280 Wasserprovinzen, Start 1.1.2020, NATO/OVKS-Bündnisse) und *Mitteleuropa 1936* (Beispielwelt).
+Die 2020-Karte wird mit `node tools/gen-europe.js <ne_50m_admin_0_countries.geojson>` erzeugt (Daten in `tools/europe-data.js`).
+
 **Starten:** `index.html` im Browser öffnen (Doppelklick genügt) – oder `python3 -m http.server` und `http://localhost:8000` öffnen.
 
 ## Spielprinzip
