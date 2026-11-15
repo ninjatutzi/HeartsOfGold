@@ -58,6 +58,27 @@ window.HOG = window.HOG || {};
     return Math.abs(a / 2);
   };
 
+  // Nachbarschaft von Provinzen anhand von Kantennähe (Toleranz T px)
+  U.adjacency = function (provs, T) {
+    T = T || 2.5;
+    const ids = Object.keys(provs), adj = {}, bbs = {};
+    ids.forEach((id) => { adj[id] = new Set(); bbs[id] = U.bbox(provs[id].points); });
+    const touches = (A, B) => {
+      for (const a of A) for (let i = 0; i < B.length; i++) {
+        const b = B[i], c = B[(i + 1) % B.length];
+        if (U.nearOnSeg(a[0], a[1], b[0], b[1], c[0], c[1]).d < T) return true;
+      }
+      return false;
+    };
+    for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+      const a = bbs[ids[i]], b = bbs[ids[j]];
+      if (a[2] + T < b[0] || b[2] + T < a[0] || a[3] + T < b[1] || b[3] + T < a[1]) continue;
+      if (touches(provs[ids[i]].points, provs[ids[j]].points) || touches(provs[ids[j]].points, provs[ids[i]].points)) { adj[ids[i]].add(ids[j]); adj[ids[j]].add(ids[i]); }
+    }
+    return adj;
+  };
+  U.isWater = (p) => !!p && p.terrain === 'water';
+
   U.dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
 
   // nächster Punkt auf Strecke

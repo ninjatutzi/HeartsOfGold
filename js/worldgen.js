@@ -112,6 +112,28 @@ window.HOG = window.HOG || {};
     ['Dänemark', 'DEN', 9.5, 56, 3500, { dk: 92, de: 8 }, {}],
   ];
 
+  // Terrain-Verteilung pro Staat (Rest = Ebene)
+  const TERRAIN = {
+    Schottland: { mountain: 0.4, hill: 0.4 }, Wales: { hill: 0.6, mountain: 0.2 }, Nordengland: { hill: 0.35 }, Bretagne: { forest: 0.3, hill: 0.2 },
+    Lothringen: { forest: 0.3, hill: 0.3 }, Elsass: { forest: 0.4, mountain: 0.2 }, Burgund: { hill: 0.4 }, Provence: { hill: 0.3, mountain: 0.3 }, Okzitanien: { hill: 0.4 }, Aquitanien: { forest: 0.4 },
+    'Mecklenburg-Vorpommern': { swamp: 0.3, forest: 0.3 }, Niedersachsen: { swamp: 0.2, forest: 0.2 }, Hessen: { forest: 0.5, hill: 0.3 }, 'Rheinland-Pfalz': { hill: 0.5, forest: 0.3 },
+    'Baden-Württemberg': { forest: 0.5, hill: 0.3 }, Bayern: { forest: 0.35, mountain: 0.25, hill: 0.2 }, Thüringen: { forest: 0.5, hill: 0.3 }, Sachsen: { hill: 0.4, forest: 0.3 }, 'Berlin-Brandenburg': { forest: 0.3, swamp: 0.2 }, Ostpreußen: { forest: 0.4, swamp: 0.3 },
+    Wien: { plains: 1 }, Niederösterreich: { hill: 0.4, forest: 0.2 }, Oberösterreich: { hill: 0.5, forest: 0.2 }, Salzburg: { mountain: 0.8 }, Tirol: { mountain: 0.9 }, Vorarlberg: { mountain: 0.8 }, Steiermark: { mountain: 0.5, hill: 0.3 }, Kärnten: { mountain: 0.6, hill: 0.2 },
+    Transdanubien: { hill: 0.3, forest: 0.2 }, Nordungarn: { hill: 0.5, mountain: 0.2 }, Böhmen: { forest: 0.4, hill: 0.3 }, Mähren: { hill: 0.4, forest: 0.2 }, Slowakei: { mountain: 0.6, hill: 0.3 },
+    Pommerellen: { forest: 0.4, swamp: 0.2 }, Masowien: { forest: 0.3, swamp: 0.15 }, Schlesien: { hill: 0.3, forest: 0.2 }, Kleinpolen: { hill: 0.4, mountain: 0.2 }, Ostpolen: { forest: 0.4, swamp: 0.4 },
+    Piemont: { mountain: 0.6, hill: 0.2 }, Lombardei: { mountain: 0.3, plains: 0.5 }, Venetien: { mountain: 0.3, swamp: 0.2 }, Toskana: { hill: 0.7 }, Latium: { hill: 0.5 }, Kampanien: { hill: 0.4, mountain: 0.3 }, Apulien: { hill: 0.3 }, Sizilien: { hill: 0.4, mountain: 0.3 },
+    Slowenien: { mountain: 0.6, forest: 0.3 }, Kroatien: { forest: 0.4, hill: 0.3 }, Bosnien: { mountain: 0.7, forest: 0.2 }, Serbien: { hill: 0.4, mountain: 0.3 }, Mazedonien: { mountain: 0.7, hill: 0.2 },
+    Siebenbürgen: { mountain: 0.5, forest: 0.3 }, Walachei: { plains: 0.6, hill: 0.2 }, Moldau: { hill: 0.4, forest: 0.2 },
+    Weißrussland: { swamp: 0.5, forest: 0.4 }, Westukraine: { forest: 0.3, hill: 0.3 }, Donbass: { hill: 0.3 }, Krim: { mountain: 0.3, desert: 0.2 }, Smolensk: { forest: 0.6, swamp: 0.2 }, Moskau: { forest: 0.5 }, Woronesch: { forest: 0.2, hill: 0.2 },
+    Galicien: { mountain: 0.5, forest: 0.3 }, Kastilien: { hill: 0.4, desert: 0.3 }, Andalusien: { desert: 0.5, mountain: 0.3 }, Katalonien: { mountain: 0.4, hill: 0.3 }, Schweiz: { mountain: 0.85 }, Dänemark: { plains: 1 }, 'Schleswig-Holstein': { swamp: 0.25 },
+  };
+  const LAWS = { fascist: 'extended', communist: 'extended', democratic: 'limited', monarchist: 'limited' };
+  function pickTerrain(name, rnd) {
+    const t = TERRAIN[name] || {}; let r = rnd();
+    for (const k in t) { if (r < t[k]) return k; r -= t[k]; }
+    return 'plains';
+  }
+
   const ALLIANCES = [
     ['Achsenmächte', ['GER', 'ITA', 'HUN']],
     ['Westmächte', ['GBR', 'FRA', 'POL']],
@@ -162,6 +184,8 @@ window.HOG = window.HOG || {};
     const w = U.clone(world), warn = [];
     for (const pid in w.provinces) {
       const p = w.provinces[pid];
+      p.terrain = p.terrain || 'plains';
+      if (p.terrain === 'water') { p.state = null; p.port = false; p.city = null; continue; }
       if (!p.state || !w.states[p.state] || p.points.length < 3) { delete w.provinces[pid]; warn.push('Provinz ohne Staat entfernt: ' + p.name); }
     }
     for (const sid in w.states) {
@@ -179,6 +203,7 @@ window.HOG = window.HOG || {};
       if (!owned.length) { delete w.countries[t]; warn.push('Land ohne Staaten entfernt: ' + c.name); continue; }
       if (!c.capital || !w.states[c.capital] || w.states[c.capital].owner !== t) c.capital = owned[0].id;
       c.policies = Object.assign({ ethnicSuppression: false, warEconomy: false, education: false }, c.policies);
+      c.law = c.law || 'limited';
     }
     w.alliances.forEach((a) => (a.members = a.members.filter((m) => w.countries[m])));
     return { world: w, warnings: warn };
@@ -211,7 +236,7 @@ window.HOG = window.HOG || {};
       if (seeds.some((s) => s.center && Math.hypot(s.x - sx, s.y - sy) < 30)) continue;
       let best = -1, bd = Infinity;
       STATES.forEach((s, i) => { const d = Math.hypot(px(s[2]) - sx, py(s[3]) - sy); if (d < bd) { bd = d; best = i; } });
-      seeds.push({ x: sx, y: sy, state: bd < 82 ? best : -1 });
+      seeds.push({ x: sx, y: sy, state: bd < 76 ? best : -1, near: bd });
     }
     const cells = G.voronoi(seeds, W, Hh);
 
@@ -219,7 +244,7 @@ window.HOG = window.HOG || {};
     COUNTRIES.forEach((c) => {
       world.countries[c[0]] = {
         tag: c[0], name: c[1], color: c[2], ideology: c[3], main: c[4], integrated: c[5].slice(), capital: null,
-        policies: { ethnicSuppression: false, warEconomy: false, education: false }, flag: c[8],
+        policies: { ethnicSuppression: false, warEconomy: false, education: false }, law: LAWS[c[3]], flag: c[8],
       };
     });
     const stateIds = [];
@@ -246,14 +271,34 @@ window.HOG = window.HOG || {};
     const count = {};
     cells.forEach((poly, i) => {
       const sd = seeds[i];
-      if (sd.state < 0 || poly.length < 3) return;
+      if (poly.length < 3) return;
+      if (sd.state < 0) {
+        if (sd.near > 150) return; // ferne See: nicht modelliert
+        pn++;
+        const wid = 'p' + pn;
+        world.provinces[wid] = { id: wid, name: 'Meer ' + wid.slice(1), points: poly, state: null, terrain: 'water', occupier: null };
+        return;
+      }
       pn++;
       const pid = 'p' + pn, st = world.states[stateIds[sd.state]];
       count[st.id] = (count[st.id] || 0) + 1;
-      world.provinces[pid] = { id: pid, name: st.name + ' ' + count[st.id], points: poly, state: st.id, occupier: null };
+      world.provinces[pid] = { id: pid, name: st.name + ' ' + count[st.id], points: poly, state: st.id, terrain: pickTerrain(st.name, rnd), occupier: null };
       st.provinces.push(pid);
     });
-    // Rest: Ressourcen auf Provinzen verteilen ist unnötig (liegt am Staat)
+    // Städte (Hauptprovinz jedes Staates) und Häfen an der Küste
+    const adj = U.adjacency(world.provinces, 2);
+    for (const sid in world.states) {
+      const st = world.states[sid], p = world.provinces[st.provinces[0]];
+      const pop = Object.values(st.pop).reduce((a, b) => a + b, 0);
+      p.city = { name: st.name, size: pop > 5000 ? 3 : pop > 2500 ? 2 : 1 };
+      if (p.terrain === 'mountain' || p.terrain === 'swamp') p.terrain = 'plains';
+    }
+    for (const pid in world.provinces) {
+      const p = world.provinces[pid];
+      if (p.terrain === 'water') continue;
+      let coast = false; adj[pid].forEach((n) => { if (world.provinces[n].terrain === 'water') coast = true; });
+      if (coast && (p.city || rnd() < 0.3)) p.port = true;
+    }
 
     ALLIANCES.forEach((a, i) => world.alliances.push({ id: 'a' + (i + 1), name: a[0], members: a[1].slice() }));
     return world;

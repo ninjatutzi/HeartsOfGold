@@ -6,7 +6,8 @@ window.HOG = window.HOG || {};
   const TOOLS = [
     ['select', '🖱️ Wählen / Punkte ziehen', 'Provinz anklicken, dann Punkte ziehen. Verbundene Grenzpunkte der Nachbarn bewegen sich mit.'],
     ['move', '✋ Provinz verschieben', 'Gewählte Provinz als Ganzes ziehen.'],
-    ['create', '➕ Neue Provinz', 'Klicke Punkte; Doppelklick / Enter / "Fertig" schließt die Provinz. Snap an vorhandene Punkte.'],
+    ['create', '➕ Neue Landprovinz', 'Klicke Punkte; Doppelklick / Enter / "Fertig" schließt die Provinz. Grüne Punkte = Land, blaue = Wasser; Magnet rastet daran ein.'],
+    ['createwater', '🌊 Neue Wasserprovinz', 'Wie Landprovinz, aber unpassierbares Wasser (nur Schiffe/Transporter).'],
     ['addpoint', '⊹ Punkt einfügen', 'Klicke auf eine Kante, um einen Punkt einzufügen.'],
     ['delpoint', '✖ Punkt löschen', 'Klicke auf einen Punkt, um ihn zu entfernen.'],
     ['assign', '🗺️ Staat zuweisen', 'Staat im Reiter "Staaten" wählen, dann Provinzen anklicken (Rechtsklick = entfernen).'],
@@ -20,7 +21,7 @@ window.HOG = window.HOG || {};
       this.tool = 'select';
       this.tab = 'prov';
       this.selProv = null; this.selState = null; this.selCountry = null;
-      this.draft = []; this.undoStack = []; this.linkFrom = null; this.snap = true;
+      this.draft = []; this.undoStack = []; this.linkFrom = null; this.snap = true; this.dotsOn = false;
       this.keyHandler = (e) => this.onKey(e);
       this.bind();
     }
@@ -28,6 +29,8 @@ window.HOG = window.HOG || {};
     open(world) {
       this.world = world;
       this.world.links = this.world.links || [];
+      for (const id in world.provinces) world.provinces[id].terrain = world.provinces[id].terrain || 'plains';
+      for (const t in world.countries) world.countries[t].law = world.countries[t].law || 'limited';
       this.selProv = null; this.selState = this.selState && world.states[this.selState] ? this.selState : Object.keys(world.states)[0] || null;
       this.selCountry = Object.keys(world.countries)[0] || null;
       this.undoStack = []; this.draft = [];
@@ -47,6 +50,10 @@ window.HOG = window.HOG || {};
       if (!this.world.provinces[this.selProv]) this.selProv = null;
       if (!this.world.states[this.selState]) this.selState = null;
       this.render();
+    }
+    coastal(p) {
+      const adj = U.adjacency(this.world.provinces, 2.5);
+      return [...(adj[p.id] || [])].some((n) => U.isWater(this.world.provinces[n]));
     }
     newId(prefix, obj) { let n = 1; while (obj[prefix + n]) n++; return prefix + n; }
     changed(p) { if (p) this.view.invalidateProv(p); else this.view.invalidate(); }
@@ -129,7 +136,7 @@ window.HOG = window.HOG || {};
     }
     click(e, x, y) {
       const v = this.view, w = this.world;
-      if (this.tool === 'create') {
+      if (this.tool === 'create' || this.tool === 'createwater') {
         const pt = this.snapPoint(x, y);
         if (this.draft.length >= 3 && Math.hypot(pt[0] - this.draft[0][0], pt[1] - this.draft[0][1]) < this.sizeOnScreen(10)) { this.finishDraft(); return; }
         const l = this.draft[this.draft.length - 1];
@@ -150,7 +157,8 @@ window.HOG = window.HOG || {};
       }
       const p = v.hit(x, y);
       if (this.tool === 'assign') {
-        if (p && this.selState) { this.snapshot(); this.assign(p.id, this.selState); }
+        if (p && U.isWater(p)) this.toast('Wasserprovinzen gehören keinem Staat.');
+        else if (p && this.selState) { this.snapshot(); this.assign(p.id, this.selState); }
         else if (!this.selState) this.toast('Erst im Reiter "Staaten" einen Staat wählen/erstellen.');
         return;
       }
@@ -169,7 +177,7 @@ window.HOG = window.HOG || {};
       v.redraw(); this.render();
     }
     rclick(e, x, y) {
-      if (this.tool === 'create' && this.draft.length) { this.draft.pop(); this.view.redraw(); return; }
+      if ((this.tool === 'create' || this.tool === 'createwater') && this.draft.length) { this.draft.pop(); this.view.redraw(); return; }
       if (this.tool === 'assign') {
         const p = this.view.hit(x, y);
         if (p) { this.snapshot(); this.assign(p.id, null); }
@@ -177,7 +185,7 @@ window.HOG = window.HOG || {};
     }
     onKey(e) {
       if (!this.running || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || !$('#modal').hidden) return;
-      if (e.key === 'Enter' && this.tool === 'create') this.finishDraft();
+      if (e.key === 'Enter' && (this.tool === 'create' || this.tool === 'createwater')) this.finishDraft();
       else if (e.key === 'Escape') { this.draft = []; this.linkFrom = null; this.selProv = null; this.view.redraw(); this.render(); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); this.undo(); }
       else if (e.key === 'Delete' && this.selProv) this.deleteProv(this.selProv);
@@ -188,7 +196,8 @@ window.HOG = window.HOG || {};
       if (pts.length < 3) { this.view.redraw(); return; }
       this.snapshot();
       const id = this.newId('p', this.world.provinces);
-      const p = { id, name: 'Provinz ' + id.slice(1), points: pts, state: this.selState && this.world.states[this.selState] ? this.selState : null, occupier: null };
+      const water = this.tool === 'createwater';
+      const p = { id, name: (water ? 'Meer ' : 'Provinz ') + id.slice(1), points: pts, state: !water && this.selState && this.world.states[this.selState] ? this.selState : null, terrain: water ? 'water' : 'plains', occupier: null };
       this.world.provinces[id] = p;
       if (p.state) this.world.states[p.state].provinces.push(id);
       this.selProv = id; this.changed(); this.render();
@@ -249,6 +258,23 @@ window.HOG = window.HOG || {};
 
     overlay(ctx) {
       const v = this.view, z = v.cam.z, w = this.world;
+      // Eckpunkte aller Provinzen: Land grün, Wasser blau
+      if (this.dotsOn || ['create', 'createwater', 'addpoint', 'delpoint'].includes(this.tool)) {
+        const seen = new Map();
+        for (const id in w.provinces) {
+          const p = w.provinces[id], water = U.isWater(p);
+          for (const q of p.points) {
+            const k = Math.round(q[0] * 2) + ',' + Math.round(q[1] * 2), o = seen.get(k);
+            if (!o) seen.set(k, { q, land: !water, water });
+            else { o.land = o.land || !water; o.water = o.water || water; }
+          }
+        }
+        const r = 3.2 / z;
+        seen.forEach((o) => {
+          if (o.land && o.water) { ctx.fillStyle = '#3bd16f'; ctx.strokeStyle = '#2f8cff'; ctx.lineWidth = 1.6 / z; ctx.beginPath(); ctx.arc(o.q[0], o.q[1], r, 0, 7); ctx.fill(); ctx.stroke(); }
+          else { ctx.fillStyle = o.land ? '#3bd16f' : '#4aa3ff'; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 0.8 / z; ctx.beginPath(); ctx.arc(o.q[0], o.q[1], r, 0, 7); ctx.fill(); ctx.stroke(); }
+        });
+      }
       // Staat-Hervorhebung
       const ss = this.selState && w.states[this.selState];
       if (ss && (this.tab === 'state' || this.tool === 'assign')) {
@@ -282,9 +308,10 @@ window.HOG = window.HOG || {};
       TOOLS.forEach(([id, name, tip]) => bar.appendChild(h('button', { class: this.tool === id ? 'on' : '', title: tip, onclick: () => { this.tool = id; this.draft = []; this.linkFrom = null; this.buildToolbar(); this.view.redraw(); this.toast(tip); } }, name)));
       bar.appendChild(h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: this.snap, onchange: (e) => (this.snap = e.target.checked) }), ' Magnet'));
       bar.appendChild(h('label', { class: 'chk', title: 'Beim Ziehen eines Punktes bewegen sich deckungsgleiche Punkte der Nachbarprovinzen mit' }, h('input', { type: 'checkbox', checked: this.linkedMove !== false, onchange: (e) => (this.linkedMove = e.target.checked) }), ' Grenzen verbunden'));
+      bar.appendChild(h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: this.dotsOn, onchange: (e) => { this.dotsOn = e.target.checked; this.view.redraw(); } }), ' Punkte zeigen'));
       bar.appendChild(h('button', { onclick: () => this.undo() }, '↶ Rückgängig'));
       bar.appendChild(h('button', { onclick: () => this.view.fit() }, '⤢'));
-      if (this.tool === 'create') bar.appendChild(h('button', { class: 'primary', onclick: () => this.finishDraft() }, '✔ Fertig'));
+      if (this.tool === 'create' || this.tool === 'createwater') bar.appendChild(h('button', { class: 'primary', onclick: () => this.finishDraft() }, '✔ Fertig'));
     }
 
     // ---------- Seitenleiste ----------
@@ -311,11 +338,30 @@ window.HOG = window.HOG || {};
     t_prov(body) {
       const w = this.world, p = this.selProv && w.provinces[this.selProv];
       body.appendChild(h('p', { class: 'hint' }, 'Werkzeug: ' + TOOLS.find((t) => t[0] === this.tool)[2]));
-      body.appendChild(h('div', { class: 'row' }, h('b', null, Object.keys(w.provinces).length + ' Provinzen'), ' · ' + Object.keys(w.states).length + ' Staaten · ' + Object.keys(w.countries).length + ' Länder'));
+      body.appendChild(h('div', { class: 'row' }, h('b', null, Object.values(w.provinces).filter((q) => !U.isWater(q)).length + ' Land- + ' + Object.values(w.provinces).filter((q) => U.isWater(q)).length + ' Wasserprovinzen'), ' · ' + Object.keys(w.states).length + ' Staaten · ' + Object.keys(w.countries).length + ' Länder'));
       if (!p) { body.appendChild(h('p', { class: 'hint' }, 'Keine Provinz gewählt. Klicke auf die Karte oder erstelle mit "➕ Neue Provinz" eine neue.')); return; }
-      body.appendChild(h('h3', null, 'Provinz ' + p.id));
+      body.appendChild(h('h3', null, (U.isWater(p) ? '🌊 Wasserprovinz ' : 'Provinz ') + p.id));
       body.appendChild(this.field('Name', h('input', { type: 'text', value: p.name, onchange: (e) => { this.snapshot(); p.name = e.target.value; } })));
-      body.appendChild(this.field('Staat', this.sel([['', '– keiner –'], ...Object.values(w.states).map((s) => [s.id, s.name + ' (' + s.owner + ')'])], p.state || '', (v) => { this.snapshot(); this.assign(p.id, v || null); })));
+      body.appendChild(this.field('Terrain', this.sel(Object.entries(D.TERRAINS).map(([k, t]) => [k, t.name.split(' (')[0]]), p.terrain || 'plains', (v) => {
+        this.snapshot(); const wasWater = U.isWater(p); p.terrain = v;
+        if (v === 'water') { this.assign(p.id, null); p.port = false; p.city = null; } else if (wasWater) p.state = p.state || null;
+        this.view.invalidateProv(p); this.render();
+      })));
+      const T = D.TERRAINS[p.terrain] || D.TERRAINS.plains;
+      if (!U.isWater(p)) body.appendChild(h('div', { class: 'sub' }, 'Verteidiger ×' + T.def + ' · Angreifer ×' + T.atk + ' · Bewegung ×' + T.move));
+      if (!U.isWater(p)) {
+        body.appendChild(this.field('Staat', this.sel([['', '– keiner –'], ...Object.values(w.states).map((s) => [s.id, s.name + ' (' + s.owner + ')'])], p.state || '', (v) => { this.snapshot(); this.assign(p.id, v || null); })));
+        body.appendChild(h('h4', null, 'Stadt & Hafen'));
+        body.appendChild(h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: !!p.city, onchange: (e) => { this.snapshot(); p.city = e.target.checked ? { name: p.name, size: 1 } : null; this.view.redraw(); this.render(); } }), ' Stadt in dieser Provinz'));
+        if (p.city) {
+          body.appendChild(this.field('Stadtname', h('input', { type: 'text', value: p.city.name, onchange: (e) => { this.snapshot(); p.city.name = e.target.value; this.view.redraw(); } })));
+          body.appendChild(this.field('Größe', this.sel(Object.entries(D.CITY_SIZES), String(p.city.size || 1), (v) => { this.snapshot(); p.city.size = +v; this.view.redraw(); })));
+        }
+        body.appendChild(h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: !!p.port, onchange: (e) => {
+          if (e.target.checked && !this.coastal(p)) { e.target.checked = false; this.toast('Ein Hafen braucht eine angrenzende Wasserprovinz.'); return; }
+          this.snapshot(); p.port = e.target.checked; this.view.redraw();
+        } }), ' ⚓ Hafen (muss an Wasser grenzen)'));
+      }
       body.appendChild(h('div', { class: 'row' }, 'Punkte: ', h('b', null, p.points.length)));
       body.appendChild(h('div', { class: 'row btns' },
         h('button', { onclick: () => this.refine(p.id) }, '➕ Punkte erhöhen (genauer)'),
@@ -328,7 +374,7 @@ window.HOG = window.HOG || {};
       const w = this.world;
       body.appendChild(h('div', { class: 'row btns' },
         h('button', { class: 'primary', onclick: () => this.newState() }, '＋ Neuer Staat'),
-        h('button', { onclick: () => { this.tool = 'assign'; this.buildToolbar(); this.view.redraw(); this.toast(TOOLS[5][2]); } }, '🗺️ Provinzen zuweisen')));
+        h('button', { onclick: () => { this.tool = 'assign'; this.buildToolbar(); this.view.redraw(); this.toast('Provinzen anklicken, um sie dem gewählten Staat zuzuweisen.'); } }, '🗺️ Provinzen zuweisen')));
       body.appendChild(this.field('Staat wählen', this.sel([['', '–'], ...Object.values(w.states).map((s) => [s.id, s.name + ' [' + s.owner + ']'])], this.selState || '', (v) => { this.selState = v || null; this.render(); this.view.redraw(); })));
       const s = this.selState && w.states[this.selState];
       if (!s) return;
@@ -385,6 +431,7 @@ window.HOG = window.HOG || {};
       body.appendChild(this.field('Staatsvolk (Hauptethnie)', this.sel(this.ethOptions(), c.main, (v) => { this.snapshot(); c.main = v; })));
       const ownedStates = Object.values(w.states).filter((s) => s.owner === c.tag);
       body.appendChild(this.field('Hauptstadt (Staat)', this.sel(ownedStates.map((s) => [s.id, s.name]), c.capital, (v) => { this.snapshot(); c.capital = v; })));
+      body.appendChild(this.field('Mannstärke-Regel', this.sel(Object.keys(D.MANPOWER_LAWS).map((k) => [k, D.MANPOWER_LAWS[k].name]), c.law || 'limited', (v) => { this.snapshot(); c.law = v; })));
       body.appendChild(h('h4', null, 'Integrierte Ethnien (machen keinen Ärger)'));
       body.appendChild(h('div', { class: 'checks' }, w.ethnicities.filter((e) => e.id !== c.main).map((e) => h('label', null, h('input', { type: 'checkbox', checked: (c.integrated || []).includes(e.id), onchange: (ev) => { this.snapshot(); c.integrated = c.integrated || []; if (ev.target.checked) c.integrated.push(e.id); else c.integrated = c.integrated.filter((x) => x !== e.id); } }), ' ' + e.name))));
       body.appendChild(h('h4', null, 'Regeln des Landes'));
@@ -414,7 +461,7 @@ window.HOG = window.HOG || {};
         if (!name || tag.length < 2) { alert('Name und Kürzel nötig.'); return false; }
         if (w.countries[tag]) { alert('Kürzel existiert schon.'); return false; }
         this.snapshot();
-        w.countries[tag] = { tag, name, color: '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0'), ideology: 'democratic', main: w.ethnicities[0].id, integrated: [], capital: null, policies: { ethnicSuppression: false, warEconomy: false, education: false }, flag: H.flag.random() };
+        w.countries[tag] = { tag, name, color: '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0'), ideology: 'democratic', main: w.ethnicities[0].id, integrated: [], capital: null, law: 'limited', policies: { ethnicSuppression: false, warEconomy: false, education: false }, flag: H.flag.random() };
         this.selCountry = tag; this.render(); this.view.redraw();
       } }]);
     }

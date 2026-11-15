@@ -42,18 +42,56 @@ window.HOG = window.HOG || {};
     civ: { name: 'Zivilfabrik', icon: '🏭', cost: 150, work: 500, gdp: 30 },
     mil: { name: 'Rüstungsfabrik', icon: '⚒️', cost: 200, work: 650, gdp: 12 },
     power: { name: 'Kraftwerk', icon: '⚡', cost: 120, work: 380, gdp: 15 },
+    port: { name: 'Hafen', icon: '⚓', cost: 180, work: 450, gdp: 10, prov: true }, // pro Provinz, braucht angrenzendes Wasser
   };
   D.POWER_OUTPUT = 5; // Energie pro Kraftwerk
   D.POWER_USE = 1;
-  D.TRADE_PRICE = 4; // Geld pro Ressourceneinheit beim Zukauf // Verbrauch pro Fabrik
+  D.TRADE_PRICE = 3; // Geld pro importierter Ressourceneinheit und Tag
 
-  // Feste Truppen (kein Designer). atk/def/hp, speed in Pixel/Tag, cost in Produktionspunkten
-  D.UNITS = {
-    infantry: { name: 'Infanterie', icon: '🪖', atk: 4, def: 6, hp: 100, speed: 22, pp: 50, manpower: 10, res: { steel: 2 }, upkeep: 0.05, tech: null },
-    artillery: { name: 'Artillerie', icon: '💣', atk: 9, def: 2, hp: 70, speed: 18, pp: 90, manpower: 5, res: { steel: 5 }, upkeep: 0.08, tech: null },
-    tank: { name: 'Panzer', icon: '🛡️', atk: 11, def: 8, hp: 140, speed: 40, pp: 180, manpower: 4, res: { steel: 8, chromium: 4, oil: 4 }, upkeep: 0.15, tech: 'armor0' },
-    fighter: { name: 'Jagdgeschwader', icon: '✈️', atk: 7, def: 3, hp: 60, speed: 95, pp: 150, manpower: 3, res: { aluminum: 8, oil: 4, tungsten: 3 }, upkeep: 0.14, air: true, tech: 'air0' },
+  // Ausrüstung: pp = Produktionspunkte pro Stück, res = Ressourcenverbrauch pro Fabrik und Tag
+  D.EQUIPMENT = {
+    rifles: { name: 'Gewehre', icon: '🔫', pp: 5, res: { steel: 1 }, unit: 'infantry' },
+    guns: { name: 'Geschütze', icon: '💣', pp: 15, res: { steel: 2 }, unit: 'artillery' },
+    tanks: { name: 'Panzer', icon: '🛡️', pp: 30, res: { steel: 3, chromium: 1, oil: 1 }, unit: 'tank' },
+    planes: { name: 'Flugzeuge', icon: '✈️', pp: 25, res: { aluminum: 2, oil: 1, tungsten: 0.5 }, unit: 'fighter' },
+    destroyers: { name: 'Zerstörer-Rümpfe', icon: '🚢', pp: 60, res: { steel: 2, oil: 1 }, unit: 'destroyer' },
+    cruisers: { name: 'Kreuzer-Rümpfe', icon: '🚢', pp: 120, res: { steel: 3, chromium: 1, oil: 1.5 }, unit: 'cruiser' },
+    battleships: { name: 'Schlachtschiff-Rümpfe', icon: '🚢', pp: 240, res: { steel: 4, chromium: 2, oil: 2 }, unit: 'battleship' },
   };
+
+  // Feste Truppen (kein Designer). eq/n = benötigte Ausrüstung, manpower in K, train = Ausbildungstage
+  D.UNITS = {
+    infantry: { name: 'Infanterie', icon: '🪖', atk: 4, def: 6, hp: 100, speed: 22, eq: 'rifles', n: 10, manpower: 10, train: 10, upkeep: 0.05, tech: null },
+    artillery: { name: 'Artillerie', icon: '💥', atk: 9, def: 2, hp: 70, speed: 18, eq: 'guns', n: 6, manpower: 5, train: 14, upkeep: 0.08, tech: null },
+    tank: { name: 'Panzer', icon: '🛡️', atk: 11, def: 8, hp: 140, speed: 40, eq: 'tanks', n: 6, manpower: 4, train: 18, upkeep: 0.15, tech: 'armor0' },
+    fighter: { name: 'Jagdgeschwader', icon: '✈️', atk: 7, def: 3, hp: 60, speed: 95, eq: 'planes', n: 6, manpower: 3, train: 20, upkeep: 0.14, air: true, tech: 'air0' },
+    destroyer: { name: 'Zerstörer', icon: '🚢', atk: 6, def: 4, hp: 80, speed: 70, eq: 'destroyers', n: 1, manpower: 2, train: 15, upkeep: 0.1, naval: true, tech: null },
+    cruiser: { name: 'Kreuzer', icon: '🚢', atk: 10, def: 7, hp: 150, speed: 60, eq: 'cruisers', n: 1, manpower: 3, train: 20, upkeep: 0.2, naval: true, tech: 'nav1' },
+    battleship: { name: 'Schlachtschiff', icon: '🚢', atk: 18, def: 12, hp: 300, speed: 45, eq: 'battleships', n: 1, manpower: 5, train: 30, upkeep: 0.4, naval: true, tech: 'nav2' },
+  };
+  D.TRANSPORT_SPEED = 35; // Landeinheiten auf See (verwandeln sich in Transportschiffe ohne Geschütze)
+
+  // Terrain: def = Verteidigerbonus, atk = Angreifer-Multiplikator, move = Bewegungsmultiplikator
+  D.TERRAINS = {
+    plains: { name: 'Ebene', def: 1.0, atk: 1.0, move: 1.0 },
+    forest: { name: 'Wald', def: 1.15, atk: 0.9, move: 0.8 },
+    hill: { name: 'Hügel', def: 1.25, atk: 0.85, move: 0.75 },
+    mountain: { name: 'Gebirge', def: 1.5, atk: 0.7, move: 0.5 },
+    swamp: { name: 'Sumpf', def: 1.1, atk: 0.75, move: 0.55 },
+    desert: { name: 'Wüste', def: 1.0, atk: 0.95, move: 0.75 },
+    water: { name: 'Wasser (unpassierbar für Landtruppen)', def: 1, atk: 1, move: 1 },
+  };
+  D.CITY_SIZES = { 1: 'Stadt', 2: 'Großstadt', 3: 'Metropole' };
+
+  // Mannstärke-Regeln: pct = Anteil der Bevölkerung, der rekrutierbar ist; gdp = Wirtschaftsfaktor
+  D.MANPOWER_LAWS = {
+    volunteer: { name: 'Freiwilligenarmee', pct: 0.015, gdp: 1.0, desc: '1,5 % der Bevölkerung, keine Wirtschaftskosten.' },
+    limited: { name: 'Eingeschränkte Wehrpflicht', pct: 0.03, gdp: 0.98, desc: '3 %, −2 % BIP.' },
+    extended: { name: 'Erweiterte Wehrpflicht', pct: 0.05, gdp: 0.94, desc: '5 %, −6 % BIP.' },
+    service: { name: 'Dienstpflicht', pct: 0.08, gdp: 0.88, desc: '8 %, −12 % BIP.' },
+    total: { name: 'Totale Mobilmachung', pct: 0.12, gdp: 0.78, desc: '12 %, −22 % BIP.' },
+  };
+  D.MINORITY_MANPOWER = 0.25; // nicht integrierte Minderheiten zählen nur zu diesem Anteil
 
   // Forschungsbaum. effects: unlock, atk{unit:+%}, def{}, hp{}, speed{}, gdp, civ, mil, research, energy, resource, manpower
   D.TECHS = [
@@ -93,6 +131,11 @@ window.HOG = window.HOG || {};
     { id: 'edu1', branch: 'Wirtschaft', name: 'Universitäten', cost: 120, req: [], effects: { research: 0.12 } },
     { id: 'edu2', branch: 'Wirtschaft', name: 'Forschungsinstitute', cost: 240, req: ['edu1'], effects: { research: 0.18 } },
     { id: 'pop1', branch: 'Wirtschaft', name: 'Mobilmachung', cost: 160, req: [], effects: { manpower: 0.15 } },
+    // Marine
+    { id: 'nav1', branch: 'Marine', name: 'Kreuzerbau', cost: 160, req: [], effects: { unlock: 'cruiser' } },
+    { id: 'nav2', branch: 'Marine', name: 'Schlachtschiffbau', cost: 280, req: ['nav1'], effects: { unlock: 'battleship' } },
+    { id: 'nav3', branch: 'Marine', name: 'Radar & Feuerleitung', cost: 300, req: ['nav2'], effects: { atk: { destroyer: 0.15, cruiser: 0.15, battleship: 0.15 } } },
+    { id: 'nav4', branch: 'Marine', name: 'Panzerung & Turbinen', cost: 380, req: ['nav3'], effects: { def: { destroyer: 0.15, cruiser: 0.15, battleship: 0.15 }, speed: { destroyer: 0.1, cruiser: 0.1, battleship: 0.1 } } },
     { id: 'pop2', branch: 'Wirtschaft', name: 'Allgemeine Wehrpflicht', cost: 280, req: ['pop1'], effects: { manpower: 0.2 } },
   ];
 

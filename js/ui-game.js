@@ -55,7 +55,7 @@ window.HOG = window.HOG || {};
       const v = this.view;
       v.hooks.fill = (p) => this.colorFor(p);
       v.hooks.afterFill = (ctx, p, c) => {
-        if (this.mode !== 'political') return;
+        if (this.mode !== 'political' || U.isWater(p)) return;
         const sim = this.sim, st = sim.world.states[p.state], ctrl = sim.controller(p.id);
         if (ctrl === st.owner) return;
         const oc = sim.world.countries[st.owner]; if (!oc) return;
@@ -90,7 +90,7 @@ window.HOG = window.HOG || {};
       const sim = this.sim, v = this.view, z = v.cam.z, w = sim.world;
       // Auswahl
       if (this.sel.prov) {
-        const p = w.provinces[this.sel.prov], st = w.states[p.state];
+        const p = w.provinces[this.sel.prov], st = w.states[p.state] || { provinces: [] };
         ctx.lineWidth = 1.6 / z; ctx.strokeStyle = 'rgba(255,255,255,0.8)';
         st.provinces.forEach((pid) => ctx.stroke(v.cache(w.provinces[pid]).path));
         ctx.lineWidth = 2.6 / z; ctx.strokeStyle = '#ffd24a'; ctx.stroke(v.cache(p).path);
@@ -111,16 +111,20 @@ window.HOG = window.HOG || {};
         const c = sim.pc[pid], owners = Object.keys(by[pid]);
         owners.forEach((o, i) => {
           const list = by[pid][o], country = w.countries[o];
-          const bw = 26, bh = 16, off = (i - (owners.length - 1) / 2) * (bw + 3);
+          const bw = 42, bh = 16, off = (i - (owners.length - 1) / 2) * (bw + 3);
           const sel = list.some((u) => this.sel.ids.has(u.id));
-          ctx.save(); ctx.translate(c[0], c[1]); ctx.scale(1 / z, 1 / z); ctx.translate(off - bw / 2, -bh / 2);
-          const art = H.flag.sprite(country.flag, 26, 16);
-          ctx.drawImage(art, 0, 0, bw, bh);
+          let dom = list[0];
+          list.forEach((u) => { const a = D.UNITS[u.type], d = D.UNITS[dom.type]; if (a.atk + a.def > d.atk + d.def) dom = u; });
+          const embarked = list.every((u) => sim.isEmbarked(u));
+          ctx.save(); ctx.translate(c[0], c[1]); ctx.scale(1 / z, 1 / z); ctx.translate(off - bw / 2, -bh / 2 - 3);
+          ctx.fillStyle = '#1b2430'; ctx.fillRect(0, 0, bw, bh);
+          ctx.drawImage(H.flag.sprite(country.flag, 24, 16), 0, 0, 24, bh);
+          H.flag.unitIcon(ctx, dom.type, 33, 8, 14, embarked);
           ctx.lineWidth = sel ? 2.5 : 1.2; ctx.strokeStyle = sel ? '#ffd24a' : '#000'; ctx.strokeRect(0, 0, bw, bh);
           const fighting = list.some((u) => sim.g.day - (u.fighting || -9) <= 1);
           ctx.font = '700 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#fff';
-          ctx.strokeText(list.length, bw / 2, bh / 2 + 0.5); ctx.fillText(list.length, bw / 2, bh / 2 + 0.5);
+          ctx.strokeText(list.length, 12, bh / 2 + 0.5); ctx.fillText(list.length, 12, bh / 2 + 0.5);
           if (fighting) { ctx.font = '12px sans-serif'; ctx.fillText('⚔️', bw / 2, -8); }
           ctx.restore();
         });
@@ -200,8 +204,8 @@ window.HOG = window.HOG || {};
       top.appendChild(h('div', { class: 'tb-chips' },
         chip('💰', Math.round(cs.money), 'BIP-Geld (Einnahmen/Tag: ' + net.toFixed(1) + ')', cs.money < 0 ? 'bad' : ''),
         chip('', (net >= 0 ? '+' : '') + net.toFixed(1), 'Netto pro Tag', net < 0 ? 'bad' : 'good'),
-        chip('👥', Math.round(cs.manpower) + ' K', 'Manpower (+' + st.manRegen.toFixed(1) + '/Tag)'),
-        RES.map((r) => chip(r.icon, Math.floor(cs.stock[r.id]) + ' (+' + st.res[r.id].toFixed(1) + ')', r.name + ': Lager (Produktion/Tag)')),
+        chip('👥', Math.round(cs.manpower) + ' K', 'Manpower (max. ' + Math.round(st.manCap) + ' K, +' + st.manRegen.toFixed(1) + '/Tag) – ' + st.law.name),
+        RES.map((r) => chip(r.icon, st.used[r.id].toFixed(1) + '/' + st.avail[r.id].toFixed(1), r.name + ': verbraucht / verfügbar pro Tag (Produktion ' + st.res[r.id].toFixed(1) + ' + Import ' + st.imports[r.id] + ')', st.demandRes[r.id] > st.avail[r.id] + 0.01 ? 'bad' : '')),
         chip('⚡', Math.round(st.supply) + '/' + st.demand, 'Energie: Angebot/Bedarf', st.energyEff < 1 ? 'bad' : ''),
         chip('🏭', st.pp.toFixed(1), 'Rüstungsausstoß (PP/Tag)'),
         chip('🔬', st.rp.toFixed(1), 'Forschungspunkte/Tag')));
@@ -237,9 +241,19 @@ window.HOG = window.HOG || {};
     tab_state(body) {
       const sim = this.sim, w = sim.world;
       if (!this.sel.prov) { body.appendChild(h('p', { class: 'hint' }, 'Klicke auf eine Provinz, um ihren Staat zu sehen.\nRechtsklick = ausgewählte Truppen bewegen.\nLeertaste = Pause, 1–4 = Geschwindigkeit.')); return; }
-      const p = w.provinces[this.sel.prov], s = w.states[p.state], ctrl = sim.stateCtrl(s);
+      const p = w.provinces[this.sel.prov];
+      if (U.isWater(p)) {
+        body.appendChild(h('h3', null, '🌊 ' + p.name), h('div', { class: 'sub' }, 'Wasser – unpassierbar für Landtruppen. Landeinheiten werden in Häfen eingeschifft und fahren als Transportschiffe (ohne Geschütze). Schiffe kämpfen nur hier.'));
+        this.unitList(body, p);
+        return;
+      }
+      const s = w.states[p.state], ctrl = sim.stateCtrl(s);
       const mine = ctrl === this.player;
       body.appendChild(h('h3', null, s.name), h('div', { class: 'sub' }, 'Provinz: ' + p.name));
+      const T = D.TERRAINS[p.terrain] || D.TERRAINS.plains;
+      body.appendChild(h('div', { class: 'row' }, h('span', { class: 'chip' }, '🌍 ' + T.name), h('span', { class: 'sub' }, 'Verteidiger ×' + T.def + ' · Angreifer ×' + T.atk + ' · Tempo ×' + T.move),
+        p.city ? h('span', { class: 'chip' }, '🏙 ' + p.city.name + ' (' + (D.CITY_SIZES[p.city.size] || 'Stadt') + ', +' + 10 * (p.city.size || 1) + '% Verteidigung)') : '',
+        p.port ? h('span', { class: 'chip' }, '⚓ Hafen') : ''));
       body.appendChild(h('div', { class: 'row' }, 'Besitzer: ', this.cflag(s.owner), ' ', h('b', null, this.cname(s.owner))));
       body.appendChild(h('div', { class: 'row' }, 'Okkupant: ', this.cflag(ctrl), ' ', h('b', null, this.cname(ctrl)), ctrl !== s.owner ? h('span', { class: 'bad' }, '  (besetzt)') : ''));
       const provCtrl = sim.controller(p.id);
@@ -260,13 +274,18 @@ window.HOG = window.HOG || {};
       body.appendChild(h('h4', null, 'Ressourcen (pro Tag)'));
       body.appendChild(h('div', { class: 'reslist' }, RES.map((r) => h('span', { class: 'chip' }, r.icon + ' ' + (s.resources[r.id] || 0)))));
       body.appendChild(h('h4', null, 'Gebäude (' + (s.buildings.civ + s.buildings.mil + s.buildings.power) + '/' + s.slots + ' Plätze)'));
-      body.appendChild(h('div', { class: 'row' }, Object.keys(D.BUILDINGS).map((k) => h('span', { class: 'chip' }, D.BUILDINGS[k].icon + ' ' + s.buildings[k] + ' ' + D.BUILDINGS[k].name))));
+      body.appendChild(h('div', { class: 'row' }, Object.keys(D.BUILDINGS).filter((k) => !D.BUILDINGS[k].prov).map((k) => h('span', { class: 'chip' }, D.BUILDINGS[k].icon + ' ' + s.buildings[k] + ' ' + D.BUILDINGS[k].name))));
       if (mine) {
-        body.appendChild(h('div', { class: 'row btns' }, Object.keys(D.BUILDINGS).map((k) => h('button', {
+        body.appendChild(h('div', { class: 'row btns' }, Object.keys(D.BUILDINGS).filter((k) => !D.BUILDINGS[k].prov).map((k) => h('button', {
           title: 'Kosten ' + D.BUILDINGS[k].cost + ' BIP-Geld', onclick: () => this.act(sim.queueBuild(this.player, s.id, k)),
         }, '+ ' + D.BUILDINGS[k].name + ' (' + D.BUILDINGS[k].cost + ')'))));
+        if (!p.port && sim.coastal(p.id)) body.appendChild(h('div', { class: 'row btns' }, h('button', { onclick: () => this.act(sim.queueBuild(this.player, s.id, 'port', p.id)) }, '⚓ Hafen in dieser Provinz bauen (' + D.BUILDINGS.port.cost + ')')));
       }
-      // Truppen
+      this.unitList(body, p);
+    }
+
+    unitList(body, p) {
+      const sim = this.sim;
       const units = sim.unitsAt(p.id);
       body.appendChild(h('h4', null, 'Truppen in dieser Provinz (' + units.length + ')'));
       if (units.length) {
@@ -276,10 +295,10 @@ window.HOG = window.HOG || {};
           h('button', { onclick: () => { this.sel.ids = new Set(); this.again(); } }, 'Keine'),
           h('span', { class: 'sub' }, this.sel.ids.size + ' gewählt · Rechtsklick auf Ziel')));
         units.forEach((u) => {
-          const isMine = u.owner === this.player, def = D.UNITS[u.type], mx = sim.maxHp(u);
+          const isMine = u.owner === this.player, def = D.UNITS[u.type], mx = sim.maxHp(u), emb = sim.isEmbarked(u);
           body.appendChild(h('label', { class: 'unit' + (isMine ? '' : ' foe') },
             isMine ? h('input', { type: 'checkbox', checked: this.sel.ids.has(u.id), onchange: (e) => { e.target.checked ? this.sel.ids.add(u.id) : this.sel.ids.delete(u.id); this.view.redraw(); } }) : this.cflag(u.owner, 18, 12),
-            def.icon + ' ' + def.name, h('span', { class: 'sub' }, ' ' + Math.round(u.hp) + '/' + Math.round(mx) + (u.path.length ? ' → ' + sim.world.provinces[u.path[u.path.length - 1]].name : '')),
+            (emb ? '⛴️ Transport (' + def.name + ')' : def.icon + ' ' + def.name), h('span', { class: 'sub' }, ' ' + Math.round(u.hp) + '/' + Math.round(mx) + (u.path.length ? ' → ' + sim.world.provinces[u.path[u.path.length - 1]].name : '')),
             this.bar(u.hp / mx, 'hp')));
         });
       }
@@ -302,10 +321,13 @@ window.HOG = window.HOG || {};
         body.appendChild(h('label', { class: 'policy' }, h('input', { type: 'checkbox', checked: !!c.policies[id], onchange: () => { sim.togglePolicy(tag, id); this.again(); } }),
           h('div', null, h('b', null, P.name), h('div', { class: 'sub' }, P.desc))));
       });
-      body.appendChild(h('h4', null, 'Handel (Zukauf für ' + D.TRADE_PRICE + ' Geld pro Einheit)'));
-      RES.forEach((r) => body.appendChild(h('div', { class: 'row' }, h('span', { class: 'chip' }, r.icon + ' ' + r.name + ': ' + Math.floor(cs.stock[r.id])),
-        h('button', { onclick: () => this.act(sim.buyResource(tag, r.id, 20)) }, '+20 (' + 20 * D.TRADE_PRICE + ')'),
-        h('button', { onclick: () => this.act(sim.buyResource(tag, r.id, 100)) }, '+100 (' + 100 * D.TRADE_PRICE + ')'))));
+      body.appendChild(h('h4', null, 'Mannstärke-Regeln'));
+      body.appendChild(h('div', { class: 'sub' }, 'Rekrutierbar: ' + Math.round(st.manCap) + ' K (Pool max.) · Nachschub ' + st.manRegen.toFixed(1) + ' K/Tag · Nicht integrierte Minderheiten zählen nur zu ' + Math.round(D.MINORITY_MANPOWER * 100) + ' %.'));
+      Object.keys(D.MANPOWER_LAWS).forEach((id) => {
+        const L = D.MANPOWER_LAWS[id];
+        body.appendChild(h('label', { class: 'policy' }, h('input', { type: 'radio', name: 'law', checked: c.law === id, onchange: () => this.act(sim.setLaw(tag, id)) }),
+          h('div', null, h('b', null, L.name), h('div', { class: 'sub' }, L.desc))));
+      });
       body.appendChild(h('h4', null, 'Alle Staaten'));
       sim.ownedStates(tag).forEach((s) => body.appendChild(h('div', { class: 'row link', onclick: () => { this.selectProv(s.provinces[0], false); this.tab = 'state'; this.renderSide(); const pc = sim.pc[s.provinces[0]]; this.view.focus(pc[0], pc[1]); } },
         s.name + (sim.stateCtrl(s) !== tag ? ' (besetzt von ' + this.cname(sim.stateCtrl(s)) + ')' : ''))));
@@ -313,31 +335,59 @@ window.HOG = window.HOG || {};
 
     tab_prod(body) {
       const sim = this.sim, tag = this.player, c = sim.g.c[tag], st = sim.stats(tag);
-      body.appendChild(h('div', { class: 'row' }, h('b', null, 'Rüstungsausstoß: ' + st.pp.toFixed(1) + ' PP/Tag'), '   Manpower: ' + Math.round(c.manpower) + ' K'));
-      body.appendChild(h('h4', null, 'Truppen produzieren (feste Typen)'));
+      const free = st.mil - c.lines.reduce((a, l) => a + l.fac, 0);
+      body.appendChild(h('div', { class: 'row' }, h('b', null, '⚒️ Rüstungsfabriken: ' + st.mil), h('span', { class: free > 0 ? 'good' : 'sub' }, '  frei: ' + Math.max(0, free)), h('span', { class: 'sub' }, '  ·  Leistung/Fabrik: ' + st.ppPerFac.toFixed(2) + ' PP/Tag')));
+      // Ressourcen (Summe aller Ressourcen wird verbraucht)
+      body.appendChild(h('h4', null, 'Ressourcen pro Tag (Produktion + Import)'));
+      RES.forEach((r) => {
+        const dem = st.demandRes[r.id], av = st.avail[r.id], short = dem > av + 0.01;
+        body.appendChild(h('div', { class: 'resrow' }, h('span', { class: 'rn' }, r.icon + ' ' + r.name),
+          h('span', { class: short ? 'bad' : '' }, 'Bedarf ' + dem.toFixed(1) + ' / ' + av.toFixed(1) + ' (' + st.res[r.id].toFixed(1) + ' eigen)'),
+          h('span', { class: 'imp' }, h('button', { onclick: () => { sim.setImport(tag, r.id, (c.imports[r.id] || 0) - 1); this.again(); } }, '−'), ' Import ' + (c.imports[r.id] || 0) + ' ', h('button', { onclick: () => { sim.setImport(tag, r.id, (c.imports[r.id] || 0) + 1); this.again(); } }, '+'))));
+      });
+      body.appendChild(h('div', { class: 'sub' }, 'Import kostet ' + D.TRADE_PRICE + ' Geld pro Einheit und Tag (' + st.importCost.toFixed(1) + '/Tag). Fehlt eine Ressource, sinkt der Ausstoß der betroffenen Linien.'));
+
+      body.appendChild(h('h4', null, 'Equipment-Hersteller'));
+      Object.keys(D.EQUIPMENT).forEach((k) => {
+        const E = D.EQUIPMENT[k], ok = sim.equipUnlocked(tag, k), exists = c.lines.some((l) => l.eq === k);
+        if (exists) return;
+        const cost = Object.keys(E.res).map((r) => E.res[r] + ' ' + RES.find((x) => x.id === r).icon).join(' ');
+        body.appendChild(h('div', { class: 'unitrow' + (ok ? '' : ' locked') }, h('div', null, h('b', null, E.icon + ' ' + E.name), h('div', { class: 'sub' }, E.pp + ' PP/Stück · je Fabrik/Tag: ' + cost + (ok ? '' : ' · 🔒 ' + sim.techById[D.UNITS[E.unit].tech].name))),
+          h('button', { disabled: !ok, onclick: () => this.act(sim.addLine(tag, k, Math.max(1, Math.min(5, free)))) }, '+ Linie')));
+      });
+      c.lines.forEach((l) => {
+        const E = D.EQUIPMENT[l.eq], info = st.lines[l.id] || { rate: 0, ratio: 1 };
+        body.appendChild(h('div', { class: 'item' }, h('div', { class: 'itemhead' }, h('b', null, E.icon + ' ' + E.name), h('span', { class: 'sub' }, ' Lager: ' + Math.floor(c.equip[l.eq] || 0) + ' · gebaut: ' + l.made), h('button', { class: 'x', onclick: () => { sim.removeLine(tag, l.id); this.again(); } }, '✕')),
+          h('div', { class: 'row' }, h('button', { onclick: () => { sim.setFactories(tag, l.id, l.fac - 5); this.again(); } }, '−5'), h('button', { onclick: () => { sim.setFactories(tag, l.id, l.fac - 1); this.again(); } }, '−'),
+            h('b', null, ' ' + l.fac + ' Fabriken '), h('button', { onclick: () => { sim.setFactories(tag, l.id, l.fac + 1); this.again(); } }, '+'), h('button', { onclick: () => { sim.setFactories(tag, l.id, l.fac + 5); this.again(); } }, '+5'),
+            h('button', { title: 'Alle freien Fabriken', onclick: () => { sim.setFactories(tag, l.id, l.fac + Math.max(0, sim.freeFactories(tag))); this.again(); } }, 'max')),
+          this.bar(l.progress / E.pp), h('div', { class: 'sub' }, (info.rate / E.pp).toFixed(2) + ' Stück/Tag' + (info.ratio < 0.999 ? '' : ''), info.ratio < 0.999 ? h('span', { class: 'bad' }, ' ⚠ Ressourcenmangel (' + Math.round(info.ratio * 100) + ' %)') : '')));
+      });
+
+      body.appendChild(h('h4', null, 'Truppen ausbilden (feste Typen) – Manpower: ' + Math.round(c.manpower) + ' K'));
       Object.keys(D.UNITS).forEach((k) => {
-        const u = D.UNITS[k], ok = sim.mods[tag].unlocked[k];
-        const cost = Object.keys(u.res).map((r) => u.res[r] + ' ' + RES.find((x) => x.id === r).icon).join(' ');
+        const u = D.UNITS[k], ok = sim.unitUnlocked(tag, k), E = D.EQUIPMENT[u.eq], have = Math.floor(c.equip[u.eq] || 0);
         body.appendChild(h('div', { class: 'unitrow' + (ok ? '' : ' locked') },
-          h('div', null, h('b', null, u.icon + ' ' + u.name), h('div', { class: 'sub' }, `Angriff ${u.atk} · Verteidigung ${u.def} · HP ${u.hp} · Tempo ${u.speed}`), h('div', { class: 'sub' }, `${u.pp} PP · ${u.manpower} K Manpower · ${cost}` + (ok ? '' : ' · 🔒 Forschung: ' + sim.techById[u.tech].name))),
-          h('button', { disabled: !ok, onclick: () => this.act(sim.addProduction(tag, k)) }, '+ Linie')));
+          h('div', null, h('b', null, u.icon + ' ' + u.name), h('div', { class: 'sub' }, `Angriff ${u.atk} · Verteidigung ${u.def} · HP ${u.hp} · Tempo ${u.speed}${u.naval ? ' · Schiff' : u.air ? ' · Luft' : ''}`),
+            h('div', { class: 'sub' }, `Braucht ${u.n}× ${E.name} (Lager ${have}) · ${u.manpower} K Manpower · ${u.train} Tage` + (ok ? '' : ' · 🔒 ' + sim.techById[u.tech].name))),
+          h('button', { disabled: !ok, onclick: () => this.act(sim.recruit(tag, k)) }, 'Ausbilden')));
       });
-      body.appendChild(h('h4', null, 'Produktionslinien'));
-      if (!c.prod.length) body.appendChild(h('p', { class: 'hint' }, 'Keine Linien. Ohne Linien liegen Rüstungsfabriken brach.'));
-      c.prod.forEach((l) => {
-        const u = D.UNITS[l.type];
-        body.appendChild(h('div', { class: 'item' }, h('div', { class: 'itemhead' }, h('b', null, u.icon + ' ' + u.name), h('span', { class: 'sub' }, ' gebaut: ' + l.made), h('button', { class: 'x', onclick: () => { sim.removeProduction(tag, l.id); this.again(); } }, '✕')),
-          this.bar(l.progress / u.pp), l.stalled ? h('div', { class: 'bad sub' }, '⚠ ' + l.stalled) : ''));
-      });
+      if (c.train.length) {
+        body.appendChild(h('h4', null, 'In Ausbildung'));
+        const cnt = {}; c.train.forEach((t) => { (cnt[t.type] = cnt[t.type] || []).push(t.left); });
+        Object.keys(cnt).forEach((k) => body.appendChild(h('div', { class: 'row' }, D.UNITS[k].icon + ' ' + D.UNITS[k].name + ' × ' + cnt[k].length, h('span', { class: 'sub' }, ' (nächste in ' + Math.min(...cnt[k]) + ' Tagen)'))));
+      }
       body.appendChild(h('h4', null, 'Bauprojekte (Zivilfabriken: ' + st.civ + ', Bauleistung ' + st.civWork.toFixed(1) + '/Tag)'));
-      if (!c.build.length) body.appendChild(h('p', { class: 'hint' }, 'Wähle einen Staat auf der Karte und baue dort Fabriken oder Kraftwerke.'));
+      if (!c.build.length) body.appendChild(h('p', { class: 'hint' }, 'Wähle einen Staat auf der Karte und baue dort Fabriken, Kraftwerke oder Häfen.'));
       c.build.forEach((b) => {
         const B = D.BUILDINGS[b.type], s = sim.world.states[b.state];
-        body.appendChild(h('div', { class: 'item' }, h('div', { class: 'itemhead' }, h('b', null, B.icon + ' ' + B.name), h('span', { class: 'sub' }, ' in ' + s.name), h('button', { class: 'x', onclick: () => { sim.cancelBuild(tag, b.id); this.again(); } }, '✕')), this.bar(b.work / B.work)));
+        body.appendChild(h('div', { class: 'item' }, h('div', { class: 'itemhead' }, h('b', null, B.icon + ' ' + B.name), h('span', { class: 'sub' }, ' in ' + (b.prov ? sim.world.provinces[b.prov].name : s.name)), h('button', { class: 'x', onclick: () => { sim.cancelBuild(tag, b.id); this.again(); } }, '✕')), this.bar(b.work / B.work)));
       });
       const counts = {}; sim.g.units.forEach((u) => { if (u.owner === tag) counts[u.type] = (counts[u.type] || 0) + 1; });
       body.appendChild(h('h4', null, 'Armee'));
       body.appendChild(h('div', { class: 'row' }, Object.keys(D.UNITS).map((k) => h('span', { class: 'chip' }, D.UNITS[k].icon + ' ' + (counts[k] || 0)))));
+      body.appendChild(h('h4', null, 'Ausrüstungslager'));
+      body.appendChild(h('div', { class: 'row' }, Object.keys(D.EQUIPMENT).filter((k) => sim.equipUnlocked(tag, k)).map((k) => h('span', { class: 'chip' }, D.EQUIPMENT[k].icon + ' ' + D.EQUIPMENT[k].name + ': ' + Math.floor(c.equip[k] || 0)))));
     }
 
     tab_tech(body) {

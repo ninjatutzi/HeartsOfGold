@@ -34,20 +34,35 @@ window.HOG = window.HOG || {};
   };
 
   AI.production = function (sim, tag) {
-    const c = sim.g.c[tag], s = sim.st[tag];
-    if (!s) return;
+    const c = sim.g.c[tag];
+    let s = sim.stats(tag);
     const atWar = sim.enemies(tag).length > 0;
-    const myUnits = sim.g.units.filter((u) => u.owner === tag).length;
+    // Fabriken auf Ausrüstungslinien verteilen
+    const want = [['rifles', 3], ['guns', 1]];
+    if (sim.equipUnlocked(tag, 'tanks')) want.push(['tanks', 2]);
+    if (sim.equipUnlocked(tag, 'planes') && atWar) want.push(['planes', 1]);
+    const act = want.filter(([eq]) => (c.equip[eq] || 0) < 60);
+    const sum = act.reduce((a, x) => a + x[1], 0) || 1;
+    c.lines = c.lines.filter((l) => act.some((x) => x[0] === l.eq));
+    act.forEach(([eq, wgt]) => {
+      let l = c.lines.find((x) => x.eq === eq);
+      if (!l) { l = { id: sim.g.nextId++, eq, fac: 0, progress: 0, made: 0 }; c.lines.push(l); }
+      l.fac = Math.floor((s.mil * wgt) / sum);
+    });
+    if (c.lines.length) c.lines[0].fac += s.mil - c.lines.reduce((a, l) => a + l.fac, 0);
+    // fehlende Ressourcen importieren
+    s = sim.stats(tag);
+    D.RESOURCES.forEach((r) => {
+      const dem = s.demandRes[r.id] || 0, have = s.res[r.id];
+      c.imports[r.id] = dem > have && c.money > 150 && s.income > 5 ? Math.min(12, Math.ceil(dem - have)) : 0;
+    });
+    // rekrutieren
+    const myUnits = sim.g.units.filter((u) => u.owner === tag).length + c.train.length;
     const cap = 6 + s.mil * 2.5 + (atWar ? s.mil : 0);
-    if (myUnits > cap || s.net < -1) { c.prod = []; return; }
-    // fehlende Ressourcen zukaufen
-    c.prod.forEach((l) => { if (l.need && l.stalled && c.money > 200) { sim.buyResource(tag, l.need, 15); l.need = null; } });
-    const want = Math.min(6, 1 + Math.ceil(s.mil / 6));
-    while (c.prod.length < want) {
-      const opts = ['infantry', 'infantry', 'artillery'];
-      if (sim.mods[tag].unlocked.tank) opts.push('tank', 'tank');
-      if (sim.mods[tag].unlocked.fighter && atWar) opts.push('fighter');
-      if (sim.addProduction(tag, opts[Math.floor(sim.rnd() * opts.length)])) break;
+    if (myUnits > cap || s.net < -1) return;
+    for (let i = 0; i < 3; i++) {
+      const opts = Object.keys(D.UNITS).filter((k) => !D.UNITS[k].naval && sim.unitUnlocked(tag, k));
+      sim.recruit(tag, opts[Math.floor(sim.rnd() * opts.length)]);
     }
   };
 
@@ -99,7 +114,7 @@ window.HOG = window.HOG || {};
     if (sim.rnd() > 0.14 * aggr) return;
     const W = sim.world, me = W.countries[tag];
     const nb = new Set();
-    sim.ctrlStates(tag).forEach((s) => s.provinces.forEach((pid) => sim.adj[pid].forEach((n) => { const c = sim.controller(n); if (c !== tag) nb.add(c); })));
+    sim.ctrlStates(tag).forEach((s) => s.provinces.forEach((pid) => sim.adj[pid].forEach((n) => { const c = sim.controller(n); if (c && c !== tag) nb.add(c); })));
     const cands = [...nb].filter((t) => sim.isAlive(t) && !sim.allied(tag, t) && !sim.atWar(tag, t));
     if (!cands.length) return;
     const allyStr = (t) => { let v = 0; const seen = new Set([t]); W.alliances.forEach((al) => { if (al.members.includes(t)) al.members.forEach((m) => seen.add(m)); }); seen.forEach((m) => (v += sim.isAlive(m) ? sim.strength(m) : 0)); return v; };
