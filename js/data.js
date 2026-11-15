@@ -45,7 +45,11 @@ window.HOG = window.HOG || {};
     port: { name: 'Hafen', icon: '⚓', cost: 180, work: 450, gdp: 10, prov: true }, // pro Provinz, braucht angrenzendes Wasser
   };
   D.POWER_OUTPUT = 5; // Energie pro Kraftwerk
-  D.POWER_USE = 1;
+  D.POWER_USE = 1.1;
+  D.MOVE_SCALE = 0.5; // Bewegungstempo aller Einheiten
+  D.PP_SCALE = 0.35; // Rüstungsausstoß pro Fabrik
+  D.RESEARCH_SCALE = 0.4; // Forschungstempo
+  D.TRAIN_SCALE = 1.5; // Ausbildungsdauer
   D.TRADE_PRICE = 3; // Geld pro importierter Ressourceneinheit und Tag
 
   // Ausrüstung: pp = Produktionspunkte pro Stück, res = Ressourcenverbrauch pro Fabrik und Tag

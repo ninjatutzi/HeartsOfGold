@@ -21,6 +21,7 @@ window.HOG = window.HOG || {};
       this.player = sim.g.player;
       this.speed = 0; this.sel = { prov: null, ids: new Set() };
       this.lastLog = sim.g.log[0] || null;
+      this.running = true;
       this.view.setWorld(sim.world);
       const cap = sim.capitalProv(this.player);
       if (cap) { const c = sim.pc[cap]; this.view.focus(c[0], c[1], 1.6); }
@@ -168,13 +169,22 @@ window.HOG = window.HOG || {};
         fresh.reverse().forEach((l) => {
           const mine = l.tags.includes(this.player);
           if (mine || /KRIEG/.test(l.text)) this.toast(l.text);
-          if (l.war && l.attacker !== this.player && l.tags.includes(this.player)) this.setSpeed(0);
+          if (l.war && l.attacker !== this.player && l.tags.includes(this.player)) { this.setSpeed(0); this.warPopup(l); }
         });
         if (this.tab === 'log') this.renderSide();
       }
       const now = Date.now();
       if (now - this.lastRender > 600) { this.lastRender = now; this.renderSide(); }
       if (g.over) this.gameOver();
+    }
+    warPopup(l) {
+      const sim = this.sim, w = sim.g.wars.slice().reverse().find((x) => x.attackers.includes(l.attacker));
+      if (!w) return;
+      const mine = w.attackers.includes(this.player) ? w.attackers : w.defenders, other = mine === w.attackers ? w.defenders : w.attackers;
+      const list = (arr) => h('div', { class: 'warlist' }, arr.map((t) => h('span', { class: 'chip' }, this.cflag(t, 20, 14), ' ' + this.cname(t))));
+      U.modal('⚔️ Krieg!', h('div', null,
+        h('p', null, h('b', null, this.cname(l.attacker)), ' hat ', h('b', null, this.cname(w.defenders.includes(this.player) ? this.player : w.defenders[0])), ' den Krieg erklärt!'),
+        h('h4', null, 'Deine Seite'), list(mine), h('h4', null, 'Gegner'), list(other)), [{ label: 'Verstanden', cls: 'danger' }]);
     }
     gameOver() {
       this.setSpeed(0);
@@ -206,7 +216,7 @@ window.HOG = window.HOG || {};
         chip('', (net >= 0 ? '+' : '') + net.toFixed(1), 'Netto pro Tag', net < 0 ? 'bad' : 'good'),
         chip('👥', Math.round(cs.manpower) + ' K', 'Manpower (max. ' + Math.round(st.manCap) + ' K, +' + st.manRegen.toFixed(1) + '/Tag) – ' + st.law.name),
         RES.map((r) => chip(r.icon, st.used[r.id].toFixed(1) + '/' + st.avail[r.id].toFixed(1), r.name + ': verbraucht / verfügbar pro Tag (Produktion ' + st.res[r.id].toFixed(1) + ' + Import ' + st.imports[r.id] + ')', st.demandRes[r.id] > st.avail[r.id] + 0.01 ? 'bad' : '')),
-        chip('⚡', Math.round(st.supply) + '/' + st.demand, 'Energie: Angebot/Bedarf', st.energyEff < 1 ? 'bad' : ''),
+        chip('⚡', Math.round(st.supply) + '/' + Math.round(st.demand), 'Energie: Angebot/Bedarf', st.energyEff < 1 ? 'bad' : ''),
         chip('🏭', st.pp.toFixed(1), 'Rüstungsausstoß (PP/Tag)'),
         chip('🔬', st.rp.toFixed(1), 'Forschungspunkte/Tag')));
       const sp = h('div', { class: 'tb-speed' },
@@ -215,6 +225,29 @@ window.HOG = window.HOG || {};
         [1, 2, 3, 4].map((s) => h('button', { class: this.speed === s ? 'on' : '', onclick: () => { this.lastSpeed = s; this.setSpeed(s); } }, '▶'.repeat(1) + s)),
         h('button', { onclick: () => H.app.gameMenu() }, '☰ Menü'));
       top.appendChild(sp);
+      this.renderWarbar();
+    }
+    renderWarbar() {
+      const sim = this.sim, tag = this.player, box = $('#warbar');
+      const enemies = sim.enemies(tag);
+      box.innerHTML = '';
+      if (!enemies.length) { box.hidden = true; return; }
+      box.hidden = false;
+      const mine = new Set();
+      sim.g.wars.forEach((w) => {
+        const side = w.attackers.includes(tag) ? w.attackers : w.defenders.includes(tag) ? w.defenders : null;
+        if (side) side.forEach((t) => { if (t !== tag && sim.isAlive(t) && sim.allied(tag, t) || (side.includes(t) && t !== tag && sim.isAlive(t))) mine.add(t); });
+      });
+      const enemySet = new Set(enemies);
+      const compact = mine.size + enemySet.size > 8;
+      const chip = (t, enemy) => {
+        const share = Math.round((enemy ? sim.lostShare(tag, t) : 0) * 100);
+        return h('span', { class: 'wchip ' + (enemy ? 'e' : 'a') + (compact ? ' compact' : ''), title: this.cname(t) + (enemy ? ' (Feind) – hält ' + share + ' % deines BIP besetzt' : ' (Verbündeter im Krieg)') + ' – Stärke ' + Math.round(sim.strength(t)), onclick: enemy ? () => this.peaceDialog(t) : null },
+          this.cflag(t, 26, 17), h('span', null, this.cname(t)));
+      };
+      box.appendChild(h('div', { class: 'wside' }, h('b', null, 'Mit dir'), h('span', { class: 'wchip me' + (compact ? ' compact' : '') }, this.cflag(tag, 26, 17), h('span', null, this.cname(tag))), [...mine].map((t) => chip(t, false))));
+      box.appendChild(h('div', { class: 'wsep' }, '⚔️'));
+      box.appendChild(h('div', { class: 'wside' }, h('b', null, 'Gegen dich'), [...enemySet].map((t) => chip(t, true))));
     }
 
     // ---------- Seitenleiste ----------
@@ -313,7 +346,7 @@ window.HOG = window.HOG || {};
         h('div', null, 'BIP gesamt'), h('b', null, Math.round(st.gdp)), h('div', null, 'Einnahmen/Tag'), h('b', null, st.income.toFixed(1)),
         h('div', null, 'Unterhalt/Tag'), h('b', null, st.upkeep.toFixed(1)), h('div', null, 'Zivilfabriken'), h('b', null, st.civ),
         h('div', null, 'Rüstungsfabriken'), h('b', null, st.mil), h('div', null, 'Kraftwerke'), h('b', null, st.power),
-        h('div', null, 'Energie'), h('b', { class: st.energyEff < 1 ? 'bad' : 'good' }, Math.round(st.supply) + ' / ' + st.demand + ' (' + Math.round(st.energyEff * 100) + '% Effizienz)'),
+        h('div', null, 'Energie'), h('b', { class: st.energyEff < 1 ? 'bad' : 'good' }, Math.round(st.supply) + ' / ' + Math.round(st.demand) + ' (' + Math.round(st.energyEff * 100) + '% Effizienz)'),
         h('div', null, 'Einheiten'), h('b', null, st.units)));
       body.appendChild(h('h4', null, 'Landesregeln'));
       Object.keys(D.POLICIES).forEach((id) => {
@@ -429,22 +462,34 @@ window.HOG = window.HOG || {};
             war ? h('button', { class: 'primary', onclick: () => this.peaceDialog(t) }, '🕊️ Frieden verhandeln') : '',
             war ? h('button', { onclick: () => this.surrender(t) }, 'Kapitulieren') : '',
             !war && !ally ? h('button', { class: 'danger', onclick: () => U.modal('Krieg erklären', 'Willst du ' + c.name + ' (und dessen Bündnispartner) wirklich den Krieg erklären?', [{ label: 'Abbrechen' }, { label: '⚔️ Krieg!', cls: 'danger', onclick: () => { this.act(sim.declareWar(tag, t)); } }]) }, '⚔️ Krieg erklären') : '',
+            !war && !ally ? h('button', { onclick: () => { const r = sim.requestAlliance(tag, t); this.toast(r.msg); this.again(); } }, '🤝 Bündnis anfragen') : '',
+            ally && sim.alliance(tag) ? h('button', { title: 'Bündnis verlassen', onclick: () => { sim.leaveAlliance(tag); this.again(); } }, 'Bündnis verlassen') : '',
             ally ? h('span', { class: 'good' }, 'Verbündet') : '', war ? h('span', { class: 'bad' }, 'Im Krieg seit ' + sim.dateStr(sim.warStart(tag, t))) : '')));
       });
     }
 
     peaceDialog(t) {
-      const sim = this.sim, tag = this.player, occ = sim.occupiedBy(t, tag);
-      const checks = occ.map((s) => ({ s, cb: h('input', { type: 'checkbox', checked: true }) }));
+      const sim = this.sim, tag = this.player, info = sim.conferenceInfo(t);
+      if (!info.participants.includes(tag)) { this.toast('Du führst keinen Krieg gegen ' + this.cname(t) + '.'); return; }
+      const sels = {};
+      const relevant = [...new Set([tag, ...info.states.map((x) => x.occupier)])];
+      const rows = info.states.map((s) => {
+        const sel = h('select', null,
+          h('option', { value: '' }, '↩ Zurück an ' + this.cname(t) + ' (Besitzer)'),
+          relevant.map((x) => h('option', { value: x, selected: x === s.occupier }, '→ ' + this.cname(x) + (x === tag ? ' (du)' : ''))));
+        sels[s.id] = sel;
+        return h('div', { class: 'row' }, h('span', { style: { flex: 1 } }, s.name + ' (BIP ' + Math.round(s.gdp) + ', besetzt von ' + this.cname(s.occupier) + ')'), sel);
+      });
       const body = h('div', null,
-        h('p', null, 'Friedensverhandlungen mit ', h('b', null, this.cname(t)), '. Besetzte Staaten, die du nicht annektierst, gehen zurück an ihren Besitzer.'),
-        occ.length ? h('div', null, h('b', null, 'Von dir besetzte Staaten annektieren:'), checks.map((c) => h('label', { class: 'row' }, c.cb, ' ' + c.s.name + ' (BIP ' + Math.round(c.s.gdp) + ')'))) : h('p', { class: 'sub' }, 'Du hast keinen Staat dieses Landes besetzt – nur Waffenstillstand möglich.'));
-      U.modal('🕊️ Frieden', body, [{ label: 'Abbrechen' }, {
+        h('p', null, 'Friedenskonferenz mit ', h('b', null, this.cname(t)), '. Beteiligt: ', info.participants.length > 8 ? info.participants.length + ' Länder' : info.participants.map((x) => this.cname(x)).join(', '), '. Alle Beteiligten schließen gleichzeitig Frieden; nicht zugeteilte besetzte Staaten gehen an den Besitzer zurück.'),
+        rows.length ? h('div', null, h('b', null, 'Wer bekommt welchen besetzten Staat?'), rows) : h('p', { class: 'sub' }, 'Niemand hält Staaten von ' + this.cname(t) + ' besetzt – nur Waffenstillstand möglich.'));
+      U.modal('🕊️ Friedenskonferenz', body, [{ label: 'Abbrechen' }, {
         label: 'Vorschlagen', cls: 'primary', onclick: () => {
-          const annex = checks.filter((c) => c.cb.checked).map((c) => c.s.id);
-          const r = sim.evalPeace(tag, t, annex);
-          if (r.ok) { sim.makePeace(tag, t, annex); this.toast(this.cname(t) + ': ' + r.msg); this.view.invalidate(); this.again(); }
-          else { this.toast(this.cname(t) + ': ' + r.msg); return false; }
+          const assign = {}; for (const id in sels) assign[id] = sels[id].value || null;
+          const r = sim.evalConference(t, assign, tag);
+          this.toast(r.msg);
+          if (!r.ok) return false;
+          sim.applyConference(t, assign); this.view.invalidate(); this.again();
         },
       }]);
     }

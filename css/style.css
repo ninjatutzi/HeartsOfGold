@@ -90,3 +90,9 @@ h3{margin:4px 0}h4{margin:12px 0 4px;color:var(--acc);font-size:13px;text-transf
 @media (max-width:900px){#side,#ed-wrap{width:300px}}
 
 .resrow{display:grid;grid-template-columns:110px 1fr auto;gap:6px;align-items:center;margin:3px 0;font-size:13px}.resrow .imp{white-space:nowrap}.resrow button{padding:0 7px}
+#warbar{top:8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;background:#101820ee;border:1px solid #a8453c;border-radius:8px;padding:5px 10px;max-width:70%;flex-wrap:wrap;justify-content:center}
+.wside{display:flex;gap:5px;align-items:center;flex-wrap:wrap}.wside>b{font-size:11px;color:var(--sub);text-transform:uppercase}
+.wchip{display:flex;align-items:center;gap:4px;border-radius:12px;padding:1px 8px 1px 3px;background:#0e131a;border:1px solid var(--line);font-size:12.5px}
+.wchip.e{border-color:#a8453c;cursor:pointer}.wchip.a,.wchip.me{border-color:#40916c}
+.wsep{font-size:18px}.warlist{display:flex;flex-wrap:wrap;gap:4px}
+.wchip.compact{padding:2px}.wchip.compact span{display:none}#eventlog{top:70px}

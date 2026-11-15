@@ -222,7 +222,7 @@ window.HOG = window.HOG || {};
     const rnd = U.rng(1936);
     const px = (lon) => (lon + 10) * 28, py = (lat) => (60 - lat) * 40;
     const world = G.emptyWorld('Mitteleuropa 1936');
-    world.width = W; world.height = Hh;
+    world.width = W; world.height = Hh; world.startDate = '1936-01-01';
 
     const wealth = {};
     COUNTRIES.forEach((c) => { wealth[c[0]] = c[7]; });
@@ -258,7 +258,7 @@ window.HOG = window.HOG || {};
       Object.keys(eth).forEach((k) => { pop[k] = Math.round((s[4] * eth[k]) / 100); });
       const gdp = Math.round(s[4] * 0.07 * wealth[s[1]]);
       const civ = Math.max(1, Math.round(gdp / 120)), mil = Math.max(0, Math.round(gdp / 260));
-      const power = Math.max(1, Math.ceil(((civ + mil) / H.data.POWER_OUTPUT) * 1.05));
+      const power = Math.max(1, Math.max(1, Math.round(((civ + mil) * H.data.POWER_USE) / H.data.POWER_OUTPUT * 1.05)));
       world.states[id] = {
         id, name: s[0], owner: s[1], occupier: s[1], provinces: [], resources: { oil: 0, aluminum: 0, steel: 0, tungsten: 0, chromium: 0, ...s[6] },
         pop, gdp, buildings: { civ, mil, power }, slots: civ + mil + power + Math.max(2, Math.round(gdp / 250)), unrest: 0,
