@@ -131,9 +131,9 @@ window.HOG = window.HOG || {};
       if (key === 'speed' && this.isEmbarked(u)) return D.TRANSPORT_SPEED;
       if (key === 'hp' && this.isEmbarked(u)) return D.UNITS[u.type].hp;
       const m = this.mods[u.owner];
-      return D.UNITS[u.type][key] * (1 + ((m && m[key] && m[key][u.type]) || 0));
+      return D.UNITS[u.type][key] * (1 + ((m && m[key] && ((m[key][u.type] || 0) + (m[key].all || 0))) || 0));
     }
-    maxHp(u) { return D.UNITS[u.type].hp * (1 + ((this.mods[u.owner].hp[u.type]) || 0)); }
+    maxHp(u) { const h = this.mods[u.owner].hp; return D.UNITS[u.type].hp * (1 + (h[u.type] || 0) + (h.all || 0)); }
     integrated(tag, eth) { const c = this.country(tag); return c.main === eth || (c.integrated || []).includes(eth); }
     popTotal(s) { let t = 0; for (const k in s.pop) t += s.pop[k]; return t; }
     unitUnlocked(tag, type) { return !!this.mods[tag].unlocked[type]; }
@@ -142,7 +142,7 @@ window.HOG = window.HOG || {};
     // ---------- Technik-Modifikatoren ----------
     recalcAllMods() { for (const tag in this.world.countries) this.recalcMods(tag); }
     recalcMods(tag) {
-      const m = { atk: {}, def: {}, hp: {}, speed: {}, gdp: 0, civ: 0, mil: 0, research: 0, energy: 0, resource: 0, manpower: 0, unlocked: {} };
+      const m = { atk: {}, def: {}, hp: {}, speed: {}, gdp: 0, civ: 0, mil: 0, research: 0, energy: 0, resource: 0, manpower: 0, stab: 0, assim: 0, unlocked: {} };
       for (const k in D.UNITS) if (!D.UNITS[k].tech) m.unlocked[k] = true;
       const rs = this.g.c[tag] && this.g.c[tag].research;
       if (rs) rs.done.forEach((id) => {
@@ -150,7 +150,7 @@ window.HOG = window.HOG || {};
         const e = t.effects;
         if (e.unlock) m.unlocked[e.unlock] = true;
         ['atk', 'def', 'hp', 'speed'].forEach((k) => { if (e[k]) for (const u in e[k]) m[k][u] = (m[k][u] || 0) + e[k][u]; });
-        ['gdp', 'civ', 'mil', 'research', 'energy', 'resource', 'manpower'].forEach((k) => { if (e[k]) m[k] += e[k]; });
+        ['gdp', 'civ', 'mil', 'research', 'energy', 'resource', 'manpower', 'stab', 'assim'].forEach((k) => { if (e[k]) m[k] += e[k]; });
       });
       this.mods[tag] = m;
     }
@@ -211,7 +211,10 @@ window.HOG = window.HOG || {};
         s.lines[l.id] = { rate: fe * s.ppPerFac * lr, ratio: lr, fac: fe };
         for (const r in E.res) s.used[r] += fe * E.res[r] * lr;
       });
-      s.income = gdpEff * ideo.gdp * this.policyMod(tag, 'gdp', 1) * (1 + m.gdp) * law.gdp;
+      const up = gc && gc.upheaval && this.g.day < gc.upheaval.until ? gc.upheaval : null;
+      s.upheaval = up ? up.until - this.g.day : 0;
+      if (up) { s.pp *= 0.75; s.rp *= 0.8; }
+      s.income = gdpEff * ideo.gdp * this.policyMod(tag, 'gdp', 1) * (1 + m.gdp) * law.gdp * (up ? 0.8 : 1);
       s.net = s.income - s.upkeep - s.importCost;
       this.st[tag] = s;
       return s;
@@ -330,6 +333,16 @@ window.HOG = window.HOG || {};
     }
     stopResearch(tag, id) { const r = this.g.c[tag].research; r.cur = r.cur.filter((x) => x !== id); }
     togglePolicy(tag, id) { const c = this.country(tag); c.policies[id] = !c.policies[id]; this.logMsg(c.name + ': ' + D.POLICIES[id].name + (c.policies[id] ? ' aktiviert.' : ' beendet.'), [tag]); }
+    // Ideologiewechsel: 60 Tage Umbruch (Unruhe +25, BIP −20 %, Rüstung −25 %, Forschung −20 %), Truppen −10 % Lebenspunkte
+    changeIdeology(tag, id) {
+      const c = this.country(tag), gc = this.g.c[tag];
+      if (!D.IDEOLOGIES[id] || c.ideology === id) return null;
+      if (gc.ideoDay !== undefined && this.g.day - gc.ideoDay < 180) return 'Die Ideologie kann nur alle 180 Tage gewechselt werden (noch ' + (180 - (this.g.day - gc.ideoDay)) + ' Tage).';
+      const old = c.ideology; c.ideology = id; gc.ideoDay = this.g.day; gc.upheaval = { start: this.g.day, until: this.g.day + 60 };
+      this.g.units.forEach((u) => { if (u.owner === tag) u.hp *= 0.9; });
+      this.logMsg('🔥 ' + c.name + ' wechselt die Ideologie: ' + D.IDEOLOGIES[old].name + ' → ' + D.IDEOLOGIES[id].name + '. Das Land ist im Umbruch!', [tag]);
+      return null;
+    }
     setLaw(tag, id) {
       const c = this.country(tag), gc = this.g.c[tag];
       if (!D.MANPOWER_LAWS[id] || c.law === id) return null;
@@ -531,7 +544,7 @@ window.HOG = window.HOG || {};
         if (s.owner === ctrlTag) {
           for (const e in pop) {
             if (e === owner.main) continue;
-            const mv = pop[e] * (this.integrated(s.owner, e) ? 0.00008 : 0.00003);
+            const mv = pop[e] * (this.integrated(s.owner, e) ? 0.00008 : 0.00003) * (1 + (this.mods[s.owner] ? this.mods[s.owner].assim : 0));
             pop[e] -= mv; pop[owner.main] = (pop[owner.main] || 0) + mv;
           }
         }
@@ -549,6 +562,9 @@ window.HOG = window.HOG || {};
         const share = minor / tot, ideo = D.IDEOLOGIES[ctrl.ideology] || { unrest: 0 };
         let target = ideo.unrest + share * 80 + (ctrlTag !== s.owner ? 20 : 0);
         if (sup && share > 0.01) target += D.POLICIES.ethnicSuppression.effects.unrestFlat;
+        target -= this.mods[ctrlTag] ? this.mods[ctrlTag].stab : 0;
+        const up = this.g.c[ctrlTag] && this.g.c[ctrlTag].upheaval;
+        if (up && this.g.day < up.until) target += 25;
         target = Math.max(0, Math.min(100, target));
         s.unrest = (s.unrest || 0) + Math.max(-0.8, Math.min(0.8, target - (s.unrest || 0)));
         s.gdp *= 1 + 0.00005 * this.stateEff(s);

@@ -166,7 +166,7 @@ add('TUR', [
 exports.STATES = S;
 
 exports.ALLIANCES = [
-  ['NATO', ['GBR', 'FRA', 'DEU', 'ITA', 'ESP', 'PRT', 'NLD', 'BEL', 'LUX', 'DNK', 'NOR', 'POL', 'CZE', 'SVK', 'HUN', 'ROU', 'BGR', 'GRC', 'TUR', 'HRV', 'SVN', 'ALB', 'MNE', 'MKD', 'EST', 'LVA', 'LTU']],
+  // Die NATO existiert in dieser Welt nicht.
   ['OVKS', ['RUS', 'BLR']],
 ];
 

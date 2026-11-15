@@ -24,8 +24,9 @@ window.HOG = window.HOG || {};
   app.worldList = function () {
     const saved = U.storage.get(WK, {});
     const builtin = [];
-    if (H.worlds && H.worlds.europe2020) builtin.push({ key: '__eu2020', name: '🌍 Europa 2020 (Natural-Earth-Grenzen)', make: () => U.clone(H.worlds.europe2020) });
-    builtin.push({ key: '__default', name: '🌍 Mitteleuropa 1936 (Beispielwelt)', make: () => H.worldgen.defaultWorld() });
+    if (H.worlds && H.worlds.europe1936) builtin.push({ key: '__eu1936', name: '🌍 Europa 1936 (historische Grenzen)', make: () => U.clone(H.worlds.europe1936) });
+    if (H.worlds && H.worlds.europe2020) builtin.push({ key: '__eu2020', name: '🌍 Europa 2020 (moderne Grenzen, ohne NATO)', make: () => U.clone(H.worlds.europe2020) });
+    builtin.push({ key: '__default', name: '🌍 Mitteleuropa 1936 (einfache Beispielwelt)', make: () => H.worldgen.defaultWorld() });
     return builtin
       .concat(Object.keys(saved).map((k) => ({ key: k, name: '💾 ' + k, make: () => saved[k] })));
   };
@@ -122,6 +123,7 @@ window.HOG = window.HOG || {};
   app.editorDialog = function () {
     const body = h('div', { class: 'col' },
       h('button', { onclick: () => { U.closeModal(); app.openEditor(H.worldgen.emptyWorld()); } }, '📄 Neue leere Welt'),
+      H.worlds && H.worlds.europe1936 ? h('button', { onclick: () => { U.closeModal(); app.openEditor(U.clone(H.worlds.europe1936)); } }, '🌍 Europa 1936 bearbeiten') : '',
       H.worlds && H.worlds.europe2020 ? h('button', { onclick: () => { U.closeModal(); app.openEditor(U.clone(H.worlds.europe2020)); } }, '🌍 Europa 2020 bearbeiten') : '',
       h('button', { onclick: () => { U.closeModal(); app.openEditor(H.worldgen.defaultWorld()); } }, '🌍 Mitteleuropa 1936 bearbeiten'),
       h('button', { onclick: () => { U.closeModal(); app.loadWorldDialog((w) => app.openEditor(w)); } }, '💾 Gespeicherte Welt laden'),

@@ -2,8 +2,13 @@
 
 Eine 2D-Version eines Grand-Strategy-Spiels (inspiriert von HOI4), komplett im Browser – ohne Build-Schritt.
 
-**Welten:** *Europa 2020* (echte Länderumrisse aus Natural Earth, 39 Länder, ~300 Staaten, ~630 Land- und 280 Wasserprovinzen, Start 1.1.2020, NATO/OVKS-Bündnisse) und *Mitteleuropa 1936* (Beispielwelt).
-Die 2020-Karte wird mit `node tools/gen-europe.js <ne_50m_admin_0_countries.geojson>` erzeugt (Daten in `tools/europe-data.js`).
+**Welten:**
+- *Europa 1936* – historische Grenzen (Daten: historical-basemaps „world_1930“, ergänzt mit Natural Earth): Polen mit Ostgebieten, Tschechoslowakei, unabhängiges Österreich, Baltikum, Finnland mit Wyborg, Jugoslawien, Sowjetunion …
+- *Europa 2020* – moderne Grenzen (Natural Earth), 39 Länder, Start 1.1.2020, ohne NATO (nur OVKS).
+- *Mitteleuropa 1936* – kleine, einfache Beispielwelt.
+
+Die beiden Europa-Karten erzeugt `tools/gen-europe.js` (Daten in `tools/europe-data.js` und `tools/europe-1936.js`):
+`node tools/gen-europe.js 2020 <ne_50m_admin_0_countries.geojson>` bzw. `node tools/gen-europe.js 1936 <ne_50m…geojson> <world_1930.geojson>`.
 
 **Starten:** `index.html` im Browser öffnen (Doppelklick genügt) – oder `python3 -m http.server` und `http://localhost:8000` öffnen.
 
@@ -19,8 +24,8 @@ Die 2020-Karte wird mit `node tools/gen-europe.js <ne_50m_admin_0_countries.geoj
 - **Feste Truppen** (kein Designer): Infanterie, Artillerie, Panzer, Jagdgeschwader, Zerstörer, Kreuzer, Schlachtschiff – ausgebildet aus Ausrüstung + Manpower.
 - **Mannstärke-Regeln:** Freiwilligenarmee … Totale Mobilmachung bestimmen den rekrutierbaren Bevölkerungsanteil (und kosten BIP). Nicht integrierte Minderheiten zählen nur zu 25 %.
 - **Terrain & Wasser:** Ebene, Wald, Hügel, Gebirge, Sumpf, Wüste (je andere Verteidigungs-/Angriffs-/Tempo-Faktoren, Texturen auf der Karte). Wasserprovinzen sind für Landtruppen unpassierbar. In Häfen schiffen sich Truppen ein und fahren als Transportschiffe (ohne Geschütze). Städte geben Verteidigungsbonus.
-- **Forschungsbaum** mit ~30 Technologien (Waffen, Industrie, Wirtschaft, Manpower …).
-- **Ideologien:** Demokratisch, Faschistisch, Kommunistisch, Monarchistisch (mit unterschiedlichen Boni). Jedes Land hat eine Flagge (im Editor gestaltbar).
+- **Forschungsbaum** mit 77 Technologien in 9 Zweigen (Infanterie, Artillerie, Panzer, Luftwaffe, Marine, Industrie, Wirtschaft, Logistik, Gesellschaft).
+- **Ideologien:** Demokratisch, Faschistisch, Kommunistisch, Monarchistisch (mit unterschiedlichen Boni). Im Spiel wechselbar (Reiter „Land“) – das löst 60 Tage Umbruch aus: Unruhe +25, BIP −20 %, Rüstung −25 %, Forschung −20 %, Truppen −10 % HP; danach 180 Tage Sperre. Jedes Land hat eine Flagge (im Editor gestaltbar).
 - **Allianzen:** Bündnispartner treten Kriegen automatisch bei. KI-Länder bauen, forschen, rüsten, erklären Kriege und schließen Frieden.
 
 ### Steuerung
