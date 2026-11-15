@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hearts of Gold</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<section id="screen-menu" class="screen">
+  <div class="menu-box">
+    <h1>Hearts <span>of</span> Gold</h1>
+    <p class="tagline">2D-Grand-Strategy · Staaten · Provinzen · Bevölkerung · Krieg</p>
+    <div id="menu-buttons"></div>
+  </div>
+</section>
+
+<section id="screen-game" class="screen" hidden>
+  <header id="topbar"></header>
+  <div class="main">
+    <div class="mapwrap">
+      <canvas id="game-canvas"></canvas>
+      <div id="mapmodes" class="floating"></div>
+      <div id="eventlog"></div>
+    </div>
+    <aside id="side"></aside>
+  </div>
+</section>
+
+<section id="screen-editor" class="screen" hidden>
+  <div class="main">
+    <aside id="ed-wrap">
+      <div class="ed-head"><button id="ed-back">← Menü</button><b>Map-Maker</b></div>
+      <div id="ed-side"></div>
+    </aside>
+    <div class="mapwrap">
+      <canvas id="ed-canvas"></canvas>
+      <div id="ed-toolbar" class="floating"></div>
+      <div id="ed-msg" class="toast floating" hidden></div>
+    </div>
+  </div>
+</section>
+
+<div id="modal" hidden></div>
+
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/flag.js"></script>
+<script src="js/worldgen.js"></script>
+<script src="js/mapview.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/ui-game.js"></script>
+<script src="js/mapmaker.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
