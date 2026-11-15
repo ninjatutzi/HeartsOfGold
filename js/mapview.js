@@ -3,6 +3,23 @@ window.HOG = window.HOG || {};
 (function (H) {
   const U = H.util;
 
+  // Terrain-Texturen (kachelbar, in Weltkoordinaten). Ebene und Wasser haben keine.
+  const TEX = {};
+  function texture(ctx, type) {
+    if (TEX[type] !== undefined) return TEX[type];
+    if (type === 'plains' || type === 'water' || !type) return (TEX[type] = null);
+    const S = 16, c = document.createElement('canvas'); c.width = c.height = S * 2; const g = c.getContext('2d');
+    g.fillStyle = 'rgba(0,0,0,0.38)'; g.strokeStyle = 'rgba(0,0,0,0.38)'; g.lineWidth = 1.2; g.lineCap = 'round';
+    const tree = (x, y) => { g.beginPath(); g.moveTo(x, y - 5); g.lineTo(x + 3.5, y + 2); g.lineTo(x - 3.5, y + 2); g.closePath(); g.fill(); g.fillRect(x - 0.5, y + 2, 1, 2); };
+    if (type === 'forest') { tree(8, 10); tree(24, 8); tree(16, 25); tree(2, 27); tree(30, 28); }
+    else if (type === 'hill') { [[8, 12], [24, 22], [10, 28]].forEach(([x, y]) => { g.beginPath(); g.arc(x, y, 5, Math.PI, 0); g.stroke(); }); }
+    else if (type === 'mountain') { [[8, 12], [24, 14], [16, 28]].forEach(([x, y]) => { g.beginPath(); g.moveTo(x - 6, y + 4); g.lineTo(x, y - 5); g.lineTo(x + 6, y + 4); g.stroke(); g.beginPath(); g.moveTo(x, y - 5); g.lineTo(x + 1.5, y + 4); g.stroke(); }); }
+    else if (type === 'swamp') { [[6, 8], [22, 14], [12, 26], [28, 28]].forEach(([x, y]) => { g.beginPath(); g.moveTo(x - 5, y); g.lineTo(x + 5, y); g.stroke(); g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - 5); g.stroke(); g.beginPath(); g.moveTo(x + 2.5, y); g.lineTo(x + 3, y - 4); g.stroke(); }); }
+    else if (type === 'desert') { [[6, 8], [20, 6], [12, 20], [28, 18], [4, 28], [22, 29]].forEach(([x, y]) => { g.beginPath(); g.arc(x, y, 1.1, 0, 7); g.fill(); }); }
+    return (TEX[type] = ctx.createPattern(c, 'repeat'));
+  }
+  H.terrainTexture = texture;
+
   class MapView {
     constructor(canvas) {
       this.cv = canvas;
@@ -11,6 +28,8 @@ window.HOG = window.HOG || {};
       this.world = null;
       this.hooks = {}; // fill(p), overlay(ctx,view), down/move/up(ev,wx,wy), click, rclick, hover
       this.seaColor = '#16222e';
+      this.waterColor = '#1f5a8c';
+      this.showTerrain = true;
       this.dirty = true;
       this.borders = null;
       this.labels = null;
@@ -103,6 +122,9 @@ window.HOG = window.HOG || {};
         const seg = [e.a, e.b];
         if (!e.p2) { coast.push(seg); return; }
         const s1 = w.states[e.p1.state], s2 = w.states[e.p2.state];
+        const w1 = U.isWater(e.p1), w2 = U.isWater(e.p2);
+        if (w1 && w2) { prov.push(seg); return; }
+        if (w1 || w2) { coast.push(seg); return; }
         if (!s1 || !s2) { prov.push(seg); return; }
         if (e.p1.state === e.p2.state) prov.push(seg);
         else if (s1.owner === s2.owner) state.push(seg);
@@ -144,8 +166,9 @@ window.HOG = window.HOG || {};
       for (const id in w.provinces) {
         const p = w.provinces[id], c = this.cache(p);
         if (c.bb[2] < vx0 || c.bb[0] > vx1 || c.bb[3] < vy0 || c.bb[1] > vy1) continue;
-        ctx.fillStyle = fillFn(p);
+        ctx.fillStyle = U.isWater(p) ? this.waterColor : fillFn(p);
         ctx.fill(c.path);
+        if (this.showTerrain && z > 0.5 && p.terrain) { const tx = texture(ctx, p.terrain); if (tx) { ctx.fillStyle = tx; ctx.fill(c.path); } }
         if (this.hooks.afterFill) this.hooks.afterFill(ctx, p, c);
       }
       const line = (segs, color, width) => {
@@ -160,6 +183,7 @@ window.HOG = window.HOG || {};
       line(B.country, 'rgba(0,0,0,0.9)', 2.2);
       line(B.coast, 'rgba(0,0,0,0.9)', 1.6);
 
+      this.drawFeatures(ctx, z, vx0, vy0, vx1, vy1);
       if (this.hooks.overlay) this.hooks.overlay(ctx, this);
 
       if (this.showLabels && this.labels) {
@@ -182,6 +206,26 @@ window.HOG = window.HOG || {};
         }
       }
       if (this.hooks.top) this.hooks.top(ctx, this);
+    }
+
+    // Städte (Punkt + Name) und Häfen (Anker)
+    drawFeatures(ctx, z, vx0, vy0, vx1, vy1) {
+      const w = this.world;
+      for (const id in w.provinces) {
+        const p = w.provinces[id];
+        if (!p.city && !p.port) continue;
+        const c = this.cache(p).c;
+        if (c[0] < vx0 || c[0] > vx1 || c[1] < vy0 || c[1] > vy1) continue;
+        ctx.save(); ctx.translate(c[0], c[1]); ctx.scale(1 / z, 1 / z);
+        if (p.city) {
+          const sz = 2.5 + (p.city.size || 1) * 1.5;
+          ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.rect(-12 - sz, 12 - sz, sz * 2, sz * 2); ctx.fill(); ctx.stroke();
+          if (z > 2.2) { ctx.font = '10px sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2.5; ctx.strokeText(p.city.name, -12 - sz - 3, 15); ctx.fillText(p.city.name, -12 - sz - 3, 15); }
+        }
+        if (p.port) { ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2.5; ctx.strokeText('⚓', 12, 12); ctx.fillText('⚓', 12, 12); }
+        ctx.restore();
+      }
     }
 
     _bind() {

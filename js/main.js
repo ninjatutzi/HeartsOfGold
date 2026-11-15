@@ -109,6 +109,7 @@ window.HOG = window.HOG || {};
     U.modal('Spielstand laden', body, [{ label: 'Schließen' }]);
   };
   app.loadGame = function (save) {
+    if (!save.g || save.g.version !== 2) { alert('Dieser Spielstand stammt von einer älteren Version und ist nicht kompatibel.'); return; }
     app.show('game');
     app.gameUI = app.gameUI || new H.GameUI();
     app.gameUI.start(H.Sim.fromSave(U.clone(save)));
@@ -134,12 +135,15 @@ window.HOG = window.HOG || {};
       h('h4', null, 'Spiel'),
       h('ul', null, h('li', null, 'Klick auf Provinz: Staat ansehen, eigene Truppen werden gewählt. Rechtsklick auf Ziel: Truppen bewegen.'),
         h('li', null, 'Leertaste = Pause, 1–4 = Geschwindigkeit. Mausrad = Zoom, Ziehen = Karte verschieben.'),
-        h('li', null, 'BIP-Geld → Zivil-/Rüstungsfabriken & Kraftwerke bauen (Bauplätze pro Staat begrenzt). Mehr Zivilfabriken = schneller bauen.'),
-        h('li', null, 'Rüstungsfabriken produzieren feste Truppentypen – Ressourcen (Öl, Aluminium, Stahl, Wolfram, Chrom) können zugekauft werden.'),
+        h('li', null, 'BIP-Geld → Zivil-/Rüstungsfabriken, Kraftwerke und Häfen bauen. Mehr Zivilfabriken = schneller bauen.'),
+        h('li', null, 'Produktion: Rüstungsfabriken werden auf Ausrüstungslinien verteilt (Gewehre, Geschütze, Panzer, Flugzeuge, Schiffsrümpfe). Jede Fabrik verbraucht Ressourcen pro Tag aus der Gesamtsumme deines Landes – fehlt etwas, sinkt der Ausstoß. Fehlendes kannst du importieren.'),
+        h('li', null, 'Truppen werden aus Ausrüstung + Manpower ausgebildet. Die Mannstärke-Regel (Reiter "Land") legt fest, wie viel Bevölkerung rekrutierbar ist – und was das die Wirtschaft kostet.'),
+        h('li', null, 'Terrain (Wald, Hügel, Gebirge, Sumpf, Wüste) ändert Verteidigung, Angriff und Tempo. Landtruppen schiffen sich in Häfen ein, fahren dann als Transportschiffe über Wasser; Zerstörer, Kreuzer, Schlachtschiffe werden in Häfen gebaut.'),
         h('li', null, 'Staaten haben Besitzer und Okkupant. Im Frieden sind beide gleich; besetzte Staaten kannst du im Friedensschluss annektieren.'),
         h('li', null, 'Minderheiten, die nicht "integriert" sind, erzeugen Unruhe und senken BIP/Produktion. Die Regel "Ethnische Unterdrückung" beseitigt sie schneller, erhöht aber das Chaos.')),
       h('h4', null, 'Map-Maker'),
-      h('ul', null, h('li', null, 'Neue Provinz: Punkte klicken, Doppelklick/Enter schließt sie. Mit "Punkte erhöhen" teilst du Kanten für feinere Formen.'),
+      h('ul', null, h('li', null, 'Neue Land- oder Wasserprovinz: Punkte klicken, Doppelklick/Enter schließt sie. Die Eckpunkte der anderen Provinzen werden angezeigt (Land grün, Wasser blau) – so setzt du exakte Grenzen. Mit "Punkte erhöhen" teilst du Kanten für feinere Formen.'),
+        h('li', null, 'Pro Provinz: Terrain, Stadt und Hafen (nur an Wasser) einstellen.'),
         h('li', null, 'Provinz gewählt → Punkte ziehen. Benachbarte Grenzpunkte bewegen sich mit ("Grenzen verbunden"). Shift beim Ziehen = kein Magnet.'),
         h('li', null, 'Reiter Staaten/Länder/Allianzen/Ethnien bearbeiten Fabriken, Ressourcen, Bevölkerung, Flagge, Ideologie, Bündnisse usw. Strg+Z = Rückgängig.'),
         h('li', null, 'Unter "Welt" speichern, laden, exportieren – und mit "Diese Welt spielen" direkt testen.'))), [{ label: 'OK' }]);

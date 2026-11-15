@@ -88,3 +88,5 @@ h3{margin:4px 0}h4{margin:12px 0 4px;color:var(--acc);font-size:13px;text-transf
 #ed-toolbar button{background:#18202bee}#ed-toolbar button.on{background:var(--acc)}
 .flagprev{margin:6px 0}
 @media (max-width:900px){#side,#ed-wrap{width:300px}}
+
+.resrow{display:grid;grid-template-columns:110px 1fr auto;gap:6px;align-items:center;margin:3px 0;font-size:13px}.resrow .imp{white-space:nowrap}.resrow button{padding:0 7px}

@@ -65,4 +65,38 @@ window.HOG = window.HOG || {};
     i.className = 'flag'; i.src = F.url(f, (w || 30) * 2, (h || 20) * 2); i.width = w || 30; i.height = h || 20;
     return i;
   };
+
+  // ---- Einheiten-Symbole (weiß mit dunkler Kontur), s = Kantenlänge ----
+  F.unitIcon = function (ctx, type, cx, cy, s, embarked) {
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(s / 16, s / 16);
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.1; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    const fs = () => { ctx.fill(); ctx.stroke(); };
+    if (embarked) { // Transportschiff ohne Kanonen
+      ctx.beginPath(); ctx.moveTo(-7, 1); ctx.lineTo(7, 1); ctx.lineTo(5, 6); ctx.lineTo(-5, 6); ctx.closePath(); fs();
+      ctx.beginPath(); ctx.rect(-4, -4, 8, 5); fs(); ctx.beginPath(); ctx.rect(-1, -7, 3, 3); fs();
+    } else if (type === 'infantry') { // Helm
+      ctx.beginPath(); ctx.arc(0, 2, 6.5, Math.PI, 0); ctx.lineTo(7.5, 3); ctx.lineTo(-7.5, 3); ctx.closePath(); fs();
+      ctx.beginPath(); ctx.rect(-8, 3, 16, 2.2); fs();
+    } else if (type === 'artillery') {
+      ctx.save(); ctx.rotate(-0.45); ctx.beginPath(); ctx.rect(-6, -2.5, 14, 3.4); fs(); ctx.restore();
+      ctx.beginPath(); ctx.arc(-1, 4.5, 3.6, 0, 7); fs();
+    } else if (type === 'tank') {
+      ctx.beginPath(); ctx.rect(-7, 0, 14, 5); fs();
+      ctx.beginPath(); ctx.rect(-3.5, -4, 7, 4.2); fs();
+      ctx.beginPath(); ctx.moveTo(3.5, -2); ctx.lineTo(9, -2.6); ctx.stroke();
+    } else if (type === 'fighter') {
+      ctx.beginPath(); ctx.moveTo(0, -7.5); ctx.lineTo(2, -1); ctx.lineTo(8, 3); ctx.lineTo(2, 2.5); ctx.lineTo(1.5, 6.5); ctx.lineTo(4, 8); ctx.lineTo(-4, 8); ctx.lineTo(-1.5, 6.5); ctx.lineTo(-2, 2.5); ctx.lineTo(-8, 3); ctx.lineTo(-2, -1); ctx.closePath(); fs();
+    } else if (type === 'destroyer') {
+      ctx.beginPath(); ctx.moveTo(-8, 1); ctx.lineTo(8, 1); ctx.lineTo(5, 5); ctx.lineTo(-6, 5); ctx.closePath(); fs();
+      ctx.beginPath(); ctx.rect(-2, -3, 5, 4); fs();
+    } else if (type === 'cruiser') {
+      ctx.beginPath(); ctx.moveTo(-8, 1); ctx.lineTo(8, 1); ctx.lineTo(5.5, 5.5); ctx.lineTo(-6.5, 5.5); ctx.closePath(); fs();
+      ctx.beginPath(); ctx.rect(-4.5, -3, 4, 4); fs(); ctx.beginPath(); ctx.rect(1, -4.5, 3, 5.5); fs();
+    } else if (type === 'battleship') {
+      ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(9, 0); ctx.lineTo(6, 6); ctx.lineTo(-7, 6); ctx.closePath(); fs();
+      ctx.beginPath(); ctx.rect(-6, -3.5, 4.5, 3.5); fs(); ctx.beginPath(); ctx.rect(1.5, -3.5, 4.5, 3.5); fs();
+      ctx.beginPath(); ctx.rect(-1.5, -7, 3, 7); fs();
+    }
+    ctx.restore();
+  };
 })(window.HOG);
