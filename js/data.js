@@ -141,14 +141,71 @@ window.HOG = window.HOG || {};
     { id: 'nav3', branch: 'Marine', name: 'Radar & Feuerleitung', cost: 300, req: ['nav2'], effects: { atk: { destroyer: 0.15, cruiser: 0.15, battleship: 0.15 } } },
     { id: 'nav4', branch: 'Marine', name: 'Panzerung & Turbinen', cost: 380, req: ['nav3'], effects: { def: { destroyer: 0.15, cruiser: 0.15, battleship: 0.15 }, speed: { destroyer: 0.1, cruiser: 0.1, battleship: 0.1 } } },
     { id: 'pop2', branch: 'Wirtschaft', name: 'Allgemeine Wehrpflicht', cost: 280, req: ['pop1'], effects: { manpower: 0.2 } },
+    // ----- erweiterte Infanterie -----
+    { id: 'inf5', branch: 'Infanterie', name: 'Schutzwesten', cost: 450, req: ['inf4'], effects: { def: { infantry: 0.2 }, hp: { infantry: 0.1 } } },
+    { id: 'inf6', branch: 'Infanterie', name: 'Nachtsichtgeräte', cost: 560, req: ['inf5'], effects: { atk: { infantry: 0.2 }, speed: { infantry: 0.05 } } },
+    { id: 'inf7', branch: 'Infanterie', name: 'Vernetzte Soldaten', cost: 700, req: ['inf6'], effects: { atk: { infantry: 0.25 }, def: { infantry: 0.2 }, speed: { infantry: 0.1 } } },
+    // ----- erweiterte Artillerie -----
+    { id: 'art4', branch: 'Artillerie', name: 'Selbstfahrlafetten', cost: 450, req: ['art3'], effects: { atk: { artillery: 0.25 }, speed: { artillery: 0.25 } } },
+    { id: 'art5', branch: 'Artillerie', name: 'Präzisionsmunition', cost: 620, req: ['art4'], effects: { atk: { artillery: 0.3 }, hp: { artillery: 0.15 } } },
+    { id: 'art6', branch: 'Artillerie', name: 'Drohnengestützte Feuerleitung', cost: 780, req: ['art5'], effects: { atk: { artillery: 0.35 }, def: { artillery: 0.3 } } },
+    // ----- erweiterte Panzer -----
+    { id: 'armor4', branch: 'Panzer', name: 'Verbundpanzerung', cost: 540, req: ['armor3'], effects: { def: { tank: 0.3 }, hp: { tank: 0.2 } } },
+    { id: 'armor5', branch: 'Panzer', name: 'Aktive Schutzsysteme', cost: 700, req: ['armor4'], effects: { def: { tank: 0.3 }, atk: { tank: 0.2 } } },
+    { id: 'armor6', branch: 'Panzer', name: 'Unbemannte Türme', cost: 860, req: ['armor5'], effects: { atk: { tank: 0.35 }, speed: { tank: 0.2 } } },
+    // ----- erweiterte Luftwaffe -----
+    { id: 'air4', branch: 'Luftwaffe', name: 'Tarnkappentechnik', cost: 600, req: ['air3'], effects: { def: { fighter: 0.35 } } },
+    { id: 'air5', branch: 'Luftwaffe', name: 'Lenkwaffen', cost: 760, req: ['air4'], effects: { atk: { fighter: 0.35 }, hp: { fighter: 0.15 } } },
+    { id: 'air6', branch: 'Luftwaffe', name: 'Hyperschallflug', cost: 920, req: ['air5'], effects: { speed: { fighter: 0.3 }, atk: { fighter: 0.3 } } },
+    // ----- erweiterte Marine -----
+    { id: 'nav3b', branch: 'Marine', name: 'Sonar & Wasserbomben', cost: 340, req: ['nav1'], effects: { def: { destroyer: 0.25 }, atk: { destroyer: 0.2 } } },
+    { id: 'nav5', branch: 'Marine', name: 'Schiffsraketen', cost: 520, req: ['nav4'], effects: { atk: { destroyer: 0.25, cruiser: 0.25, battleship: 0.25 } } },
+    { id: 'nav6', branch: 'Marine', name: 'Nuklearantrieb', cost: 700, req: ['nav5'], effects: { speed: { destroyer: 0.2, cruiser: 0.2, battleship: 0.2 }, hp: { destroyer: 0.2, cruiser: 0.2, battleship: 0.2 } } },
+    { id: 'nav7', branch: 'Marine', name: 'Transportflotten', cost: 380, req: ['nav1'], effects: { speed: { all: 0.05 } } },
+    // ----- erweiterte Industrie -----
+    { id: 'ind4', branch: 'Industrie', name: 'Robotik', cost: 480, req: ['ind3'], effects: { mil: 0.25 } },
+    { id: 'ind5', branch: 'Industrie', name: '3D-Fertigung', cost: 680, req: ['ind4'], effects: { mil: 0.3 } },
+    { id: 'con3', branch: 'Industrie', name: 'Modulbauweise', cost: 330, req: ['con2'], effects: { civ: 0.25 } },
+    { id: 'con4', branch: 'Industrie', name: 'Automatisierte Baustellen', cost: 520, req: ['con3'], effects: { civ: 0.3 } },
+    { id: 'en3', branch: 'Industrie', name: 'Kernenergie', cost: 420, req: ['en2'], effects: { energy: 0.3 } },
+    { id: 'en4', branch: 'Industrie', name: 'Erneuerbare Energien', cost: 560, req: ['en3'], effects: { energy: 0.25 } },
+    // ----- erweiterte Wirtschaft -----
+    { id: 'eco4', branch: 'Wirtschaft', name: 'Globalisierung', cost: 460, req: ['eco3'], effects: { gdp: 0.12 } },
+    { id: 'eco5', branch: 'Wirtschaft', name: 'Digitale Wirtschaft', cost: 640, req: ['eco4'], effects: { gdp: 0.15 } },
+    { id: 'res3', branch: 'Wirtschaft', name: 'Recycling', cost: 380, req: ['res2'], effects: { resource: 0.2 } },
+    { id: 'res4', branch: 'Wirtschaft', name: 'Seltene Erden', cost: 560, req: ['res3'], effects: { resource: 0.25 } },
+    { id: 'edu3', branch: 'Wirtschaft', name: 'Rechenzentren', cost: 420, req: ['edu2'], effects: { research: 0.25 } },
+    { id: 'edu4', branch: 'Wirtschaft', name: 'Künstliche Intelligenz', cost: 700, req: ['edu3'], effects: { research: 0.35 } },
+    { id: 'pop3', branch: 'Wirtschaft', name: 'Berufsarmee', cost: 420, req: ['pop2'], effects: { manpower: 0.2 } },
+    { id: 'pop4', branch: 'Wirtschaft', name: 'Zivilschutz & Reserve', cost: 560, req: ['pop3'], effects: { manpower: 0.2 } },
+    // ----- Logistik (Tempo aller Einheiten) -----
+    { id: 'log1', branch: 'Logistik', name: 'Motorisierter Nachschub', cost: 180, req: [], effects: { speed: { all: 0.08 } } },
+    { id: 'log2', branch: 'Logistik', name: 'Eisenbahnnetz', cost: 300, req: ['log1'], effects: { speed: { all: 0.1 } } },
+    { id: 'log3', branch: 'Logistik', name: 'Lufttransport', cost: 460, req: ['log2'], effects: { speed: { all: 0.12 } } },
+    { id: 'log4', branch: 'Logistik', name: 'Autonome Konvois', cost: 640, req: ['log3'], effects: { speed: { all: 0.15 }, hp: { all: 0.05 } } },
+    { id: 'log5', branch: 'Logistik', name: 'Feldlazarette', cost: 260, req: ['log1'], effects: { hp: { all: 0.08 } } },
+    { id: 'log6', branch: 'Logistik', name: 'Moderne Sanitätsdienste', cost: 480, req: ['log5'], effects: { hp: { all: 0.12 } } },
+    // ----- Gesellschaft (Stabilität, Integration) -----
+    { id: 'soc1', branch: 'Gesellschaft', name: 'Polizeiapparat', cost: 160, req: [], effects: { stab: 4 } },
+    { id: 'soc2', branch: 'Gesellschaft', name: 'Sozialprogramme', cost: 280, req: ['soc1'], effects: { stab: 6, gdp: 0.02 } },
+    { id: 'soc3', branch: 'Gesellschaft', name: 'Integrationspolitik', cost: 360, req: ['soc2'], effects: { stab: 5, assim: 1.0 } },
+    { id: 'soc4', branch: 'Gesellschaft', name: 'Propagandaapparat', cost: 340, req: ['soc1'], effects: { stab: 8, research: -0.03 } },
+    { id: 'soc5', branch: 'Gesellschaft', name: 'Bildungsreform', cost: 460, req: ['soc3'], effects: { assim: 1.5, research: 0.05 } },
+    { id: 'soc6', branch: 'Gesellschaft', name: 'Gerechte Teilhabe', cost: 620, req: ['soc5'], effects: { stab: 8, gdp: 0.04 } },
   ];
 
   D.SPEEDS = [0, 900, 450, 180, 60]; // ms pro Tag, 0 = Pause
   D.START_DATE = '1936-01-01';
 
   D.PATTERNS = {
-    solid: 'Einfarbig', h2: '2 Streifen (waagerecht)', h3: '3 Streifen (waagerecht)', v3: '3 Streifen (senkrecht)',
-    cross: 'Kreuz', nordic: 'Nordisches Kreuz', saltire: 'Andreaskreuz', diag: 'Diagonale', canton: 'Obereck', triangle: 'Dreieck links',
+    solid: 'Einfarbig', h2: '2 Streifen (waagerecht)', h3: '3 Streifen (waagerecht)', h4: '4 Streifen', h5: '5 Streifen (waagerecht)', h9: '9 Streifen', v2: '2 Streifen (senkrecht)', v3: '3 Streifen (senkrecht)', v5: '5 Streifen (senkrecht)',
+    cross: 'Kreuz', nordic: 'Nordisches Kreuz', nordic2: 'Doppeltes Kreuz', saltire: 'Andreaskreuz', diag: 'Diagonale', diag2: 'Diagonalstreifen', bend: 'Schrägband', bendsin: 'Schrägband (links)',
+    canton: 'Obereck', quarters: 'Vierteilung', triangle: 'Dreieck links', chevron: 'Winkel', border: 'Rahmen', pall: 'Gabelkreuz (Y)', fesse: 'Breiter Mittelbalken', pale: 'Breiter Mittelstreifen',
+    rhombus: 'Raute', halves: 'Diagonal geteilt', stripes_canton: 'Streifen + Obereck', checker: 'Karomuster', sunburst: 'Strahlen', hoist: 'Streifen links',
   };
-  D.EMBLEMS = { none: 'Kein Emblem', star: 'Stern', circle: 'Kreis', diamond: 'Raute', cross: 'Kreuz' };
+  D.EMBLEMS = {
+    none: 'Kein Emblem', star: 'Stern', circle: 'Kreis', diamond: 'Raute', cross: 'Kreuz', crescent: 'Halbmond', moonstar: 'Halbmond + Stern', sun: 'Sonne', ring: 'Ring', ringstar: 'Stern im Ring',
+    stars3: 'Drei Sterne', stars5: 'Fünf Sterne', crown: 'Krone', sword: 'Schwert', swords: 'Gekreuzte Schwerter', tree: 'Baum', anchor: 'Anker', bird: 'Adler', wheat: 'Ähre', triangle: 'Dreieck',
+    bar: 'Balken', shield: 'Wappenschild', lion: 'Löwe', tower: 'Turm', gear: 'Zahnrad', hex: 'Sechseck', heart: 'Herz', fleur: 'Lilie', eye: 'Auge',
+  };
 })(window.HOG);

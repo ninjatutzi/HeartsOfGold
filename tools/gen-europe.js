@@ -1,5 +1,6 @@
 /* Erzeugt js/world-europe2020.js aus Natural-Earth-Ländergrenzen.
- * Aufruf:  node tools/gen-europe.js <ne_50m_admin_0_countries.geojson> [Ausgabedatei]
+ * Aufruf:  node tools/gen-europe.js 2020 <ne_50m_admin_0_countries.geojson> [Ausgabedatei]
+ *          node tools/gen-europe.js 1936 <ne_50m_admin_0_countries.geojson> <historical world_1930.geojson> [Ausgabedatei]
  * Benötigt:  npm install polygon-clipping  (nur für den Generator, nicht für das Spiel)
  * Das Ergebnis ist bereits eingecheckt – der Generator wird nur zum Neuerzeugen gebraucht. */
 const fs = require('fs'), path = require('path');
@@ -9,8 +10,13 @@ for (const f of ['util', 'data', 'flag', 'worldgen']) require(path.join(__dirnam
 const H = window.HOG, U = H.util, D = H.data;
 const DATA = require('./europe-data.js');
 
-const geo = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-const out = process.argv[3] || path.join(__dirname, '..', 'js', 'world-europe2020.js');
+const MODE = process.argv[2] === '1936' ? '1936' : '2020';
+const geo = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+const hist = MODE === '1936' ? JSON.parse(fs.readFileSync(process.argv[4], 'utf8')) : null;
+const out = process.argv[MODE === '1936' ? 5 : 4] || path.join(__dirname, '..', 'js', 'world-europe' + MODE + '.js');
+const D36 = MODE === '1936' ? require('./europe-1936.js') : null;
+const CTRY = MODE === '1936' ? D36.COUNTRIES : DATA.COUNTRIES;
+const ROWS = DATA.STATES.map((r) => { const c = r.slice(); c.orig = r[1]; return c; });
 
 // ---- Projektion ----
 const LON0 = -11, LON1 = 51.5, LAT0 = 34.5, LAT1 = 71.5, KY = 34, KX = KY * Math.cos((52 * Math.PI) / 180);
@@ -70,28 +76,61 @@ function inMulti(x, y, multi) {
   if (ukr.geometry.type === 'Polygon') ukr.geometry = { type: 'MultiPolygon', coordinates: [ukr.geometry.coordinates] };
   ukr.geometry.coordinates.push(cr);
 })();
-const byA3 = {}; geo.features.forEach((f) => { byA3[f.properties.ADM0_A3] = f; });
-const alias = { KOS: 'KOS' };
 const shapes = {}, allLand = [];
-const includeTags = new Set(DATA.COUNTRIES.map((c) => c[0]));
-const kos = geo.features.find((f) => /kosovo/i.test(f.properties.NAME));
-geo.features.forEach((f) => {
-  let tag = f.properties.ADM0_A3; if (kos === f) tag = 'KOS';
-  const m = toMulti(f.geometry, 0.7);
-  if (!m.length) return;
-  if (includeTags.has(tag)) shapes[tag] = m;
-  m.forEach((p) => allLand.push({ poly: p, bb: U.bbox(p[0]) }));
-});
+const includeTags = new Set(CTRY.map((c) => c[0]));
+if (MODE === '2020') {
+  const kos = geo.features.find((f) => /kosovo/i.test(f.properties.NAME));
+  geo.features.forEach((f) => {
+    let tag = f.properties.ADM0_A3; if (kos === f) tag = 'KOS';
+    const m = toMulti(f.geometry, 0.7);
+    if (!m.length) return;
+    if (includeTags.has(tag)) shapes[tag] = m;
+    m.forEach((p) => allLand.push({ poly: p, bb: U.bbox(p[0]) }));
+  });
+} else {
+  // 1936: historische Grenzen; Irland stammt aus den modernen Daten und wird aus dem UK-Polygon ausgeschnitten
+  const irlF = geo.features.find((f) => f.properties.ADM0_A3 === 'IRL');
+  const irl = toMulti(irlF.geometry, 0.7);
+  hist.features.forEach((f) => {
+    const m = toMulti(f.geometry, 0.7);
+    if (!m.length) return;
+    m.forEach((p) => allLand.push({ poly: p, bb: U.bbox(p[0]) }));
+    const tag = D36.NAME_TO_TAG[f.properties.NAME];
+    if (tag) shapes[tag] = (shapes[tag] || []).concat(m);
+  });
+  shapes.IRL = irl;
+  // Lücken des historischen Datensatzes (Ostanatolien, Balearen) mit den modernen Umrissen füllen – Grenzen waren dort unverändert
+  ['ESP', 'TUR'].forEach((t) => {
+    const f = geo.features.find((x) => x.properties.ADM0_A3 === t), m = toMulti(f.geometry, 0.7);
+    shapes[t] = m; m.forEach((p) => allLand.push({ poly: p, bb: U.bbox(p[0]) }));
+  });
+  if (shapes.GBR) { try { shapes.GBR = pc.difference(shapes.GBR, irl).map((p) => p.map((r) => simplifyRing(r, 0.6))); } catch (e) { console.error('UK-Irland-Schnitt fehlgeschlagen', e.message); } }
+  // Regionen den Ländern von 1936 zuordnen: Land, in dessen Polygon das Zentrum liegt
+  ROWS.forEach((r) => {
+    const [x, y] = proj(r[3], r[4]);
+    let owner = null;
+    for (const t in shapes) if (inMulti(x, y, shapes[t])) { owner = t; break; }
+    if (!owner) { let bd = 1e9; for (const t in shapes) { const pt = nearInside(shapes[t], x, y); if (pt) { const d = Math.hypot(pt[0] - x, pt[1] - y); if (d < bd) { bd = d; owner = t; } } } }
+    if (!owner) { console.error('Region ohne Land 1936:', r[0]); r[1] = '__none'; } else r[1] = owner;
+  });
+}
 const missing = [...includeTags].filter((t) => !shapes[t]); if (missing.length) console.error('Fehlende Länder:', missing);
+// Bevölkerung je Region (K), aus den 2020-Werten
+const rowPop = new Map();
+DATA.COUNTRIES.forEach((c0) => {
+  const rs = ROWS.filter((r) => r.orig === c0[0]), ws = rs.reduce((a, r) => a + r[5], 0);
+  rs.forEach((r) => rowPop.set(r, ((c0[6] * r[5]) / ws) * (MODE === '1936' ? D36.FACTOR[c0[0]] || 0.7 : 1)));
+});
+const origMain = {}; DATA.COUNTRIES.forEach((c0) => { origMain[c0[0]] = c0[2]; });
 
 // ---- Seeds + Voronoi pro Land ----
-const rnd = U.rng(2020);
+const rnd = U.rng(MODE === '1936' ? 1936 : 2020);
 const SP = 44;
 const provinces = [], states = {}, countries = {};
 let pn = 0, sn = 0;
 const warnings = [];
 const stateRowsByCountry = {};
-DATA.STATES.forEach((r) => { (stateRowsByCountry[r[1]] = stateRowsByCountry[r[1]] || []).push(r); });
+ROWS.forEach((r) => { (stateRowsByCountry[r[1]] = stateRowsByCountry[r[1]] || []).push(r); });
 
 const ethList = DATA.ETHNICITIES.map((e) => ({ id: e[0], name: e[1], color: e[2] }));
 const allCityProv = {};
@@ -113,7 +152,7 @@ function rep(poly) { // Punkt im Polygon
   return null;
 }
 
-for (const c of DATA.COUNTRIES) {
+for (const c of CTRY) {
   const tag = c[0], shape = shapes[tag];
   if (!shape) continue;
   const rows = stateRowsByCountry[tag] || [];
@@ -156,13 +195,12 @@ for (const c of DATA.COUNTRIES) {
     policies: { ethnicSuppression: false, warEconomy: false, education: false }, flag: c[8],
   };
   countries[tag] = info;
-  const wsum = rows.reduce((a, r) => a + r[5], 0);
   const stateIdByRow = new Map();
   rows.forEach((r) => {
     if (!seeds.some((s) => s.row === r)) return;
     const id = 's' + ++sn; stateIdByRow.set(r, id);
-    const pop = (c[6] * r[5]) / wsum;
-    const eth = r[6] || { [c[2]]: 100 };
+    const pop = rowPop.get(r);
+    const eth = (MODE === '1936' && D36.ETH[r[0]]) || r[6] || { [origMain[r.orig]]: 100 };
     const popm = {}; for (const k in eth) popm[k] = Math.round((pop * eth[k]) / 100);
     const gdp = Math.round(pop * 0.07 * c[5]);
     const civ = Math.max(1, Math.round(gdp / 120)), mil = Math.max(0, Math.round(gdp / 260));
@@ -225,11 +263,26 @@ oceanSeeds.forEach((s, i) => {
   });
 });
 
+// ---- Fabriken/Kraftwerke pro Land ausgleichen (arme Länder sollen nicht ohne Strom und Rüstung dastehen) ----
+for (const tag in countries) {
+  const own = Object.values(states).filter((st) => st.owner === tag).sort((x, y) => y.gdp - x.gdp);
+  if (!own.length) continue;
+  const totalGdp = own.reduce((a, st) => a + st.gdp, 0);
+  let mil = own.reduce((a, st) => a + st.buildings.mil, 0);
+  const needMil = Math.max(3, Math.round(totalGdp / 240));
+  for (let i = 0; mil < needMil; i++, mil++) own[i % own.length].buildings.mil++;
+  const demand = own.reduce((a, st) => a + st.buildings.civ + st.buildings.mil, 0) * D.POWER_USE;
+  let power = own.reduce((a, st) => a + st.buildings.power, 0);
+  const needPower = Math.max(1, Math.ceil(demand / D.POWER_OUTPUT));
+  for (let i = 0; power < needPower; i++, power++) own[i % own.length].buildings.power++;
+  own.forEach((st) => { st.slots = st.buildings.civ + st.buildings.mil + st.buildings.power + Math.max(2, Math.round(st.gdp / 250)); });
+}
+
 // ---- Welt zusammenbauen ----
-const world = H.worldgen.emptyWorld('Europa 2020');
-world.width = W; world.height = HH; world.startDate = '2020-01-01';
+const world = H.worldgen.emptyWorld('Europa ' + MODE);
+world.width = W; world.height = HH; world.startDate = MODE + '-01-01';
 world.ethnicities = ethList;
-world.startTechs = ['inf1', 'inf2', 'art1', 'art2', 'armor0', 'armor1', 'air0', 'air1', 'nav1', 'ind1', 'con1', 'en1', 'eco1', 'res1', 'edu1', 'pop1'];
+if (MODE === '2020') world.startTechs = ['inf1', 'inf2', 'art1', 'art2', 'armor0', 'armor1', 'air0', 'air1', 'nav1', 'ind1', 'con1', 'en1', 'eco1', 'res1', 'edu1', 'pop1'];
 world.countries = countries; world.states = states;
 provinces.forEach((p) => { world.provinces[p.id] = p; });
 // Städte & Häfen
@@ -246,12 +299,12 @@ for (const pid in world.provinces) {
   let coast = false; adj[pid].forEach((n) => { if (world.provinces[n].terrain === 'water') coast = true; });
   if (coast && (p.city || rnd() < 0.25)) { p.port = true; ports++; }
 }
-DATA.ALLIANCES.forEach((a, i) => world.alliances.push({ id: 'a' + (i + 1), name: a[0], members: a[1].filter((t) => countries[t]) }));
+(MODE === '1936' ? D36.ALLIANCES : DATA.ALLIANCES).forEach((a, i) => world.alliances.push({ id: 'a' + (i + 1), name: a[0], members: a[1].filter((t) => countries[t]) }));
 
 const v = H.worldgen.validate(world);
 console.error('Länder', Object.keys(v.world.countries).length, 'Staaten', Object.keys(v.world.states).length, 'Provinzen', Object.keys(v.world.provinces).length, '(Wasser', waterCount + ')', 'Häfen', ports);
 if (warnings.length) console.error('Warnungen:\n ' + warnings.join('\n '));
 if (v.warnings.length) console.error('Validierung:\n ' + v.warnings.slice(0, 20).join('\n '));
-const js = '/* automatisch erzeugt von tools/gen-europe.js – Europa 2020 (Natural-Earth-Grenzen) */\nwindow.HOG = window.HOG || {};\nHOG.worlds = HOG.worlds || {};\nHOG.worlds.europe2020 = ' + U.toJSON(v.world) + ';\n';
+const js = '/* automatisch erzeugt von tools/gen-europe.js – Europa ' + MODE + ' */\nwindow.HOG = window.HOG || {};\nHOG.worlds = HOG.worlds || {};\nHOG.worlds.europe' + MODE + ' = ' + U.toJSON(v.world) + ';\n';
 fs.writeFileSync(out, js);
 console.error('geschrieben:', out, Math.round(js.length / 1024) + ' KB');

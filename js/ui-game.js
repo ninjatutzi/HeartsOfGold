@@ -218,7 +218,8 @@ window.HOG = window.HOG || {};
         RES.map((r) => chip(r.icon, st.used[r.id].toFixed(1) + '/' + st.avail[r.id].toFixed(1), r.name + ': verbraucht / verfügbar pro Tag (Produktion ' + st.res[r.id].toFixed(1) + ' + Import ' + st.imports[r.id] + ')', st.demandRes[r.id] > st.avail[r.id] + 0.01 ? 'bad' : '')),
         chip('⚡', Math.round(st.supply) + '/' + Math.round(st.demand), 'Energie: Angebot/Bedarf', st.energyEff < 1 ? 'bad' : ''),
         chip('🏭', st.pp.toFixed(1), 'Rüstungsausstoß (PP/Tag)'),
-        chip('🔬', st.rp.toFixed(1), 'Forschungspunkte/Tag')));
+        chip('🔬', st.rp.toFixed(1), 'Forschungspunkte/Tag'),
+        st.upheaval ? chip('🔥', 'Umbruch ' + st.upheaval + ' T', 'Ideologiewechsel: Unruhe, weniger BIP/Rüstung/Forschung', 'bad') : ''));
       const sp = h('div', { class: 'tb-speed' },
         h('span', { class: 'date' }, '📅 ' + sim.dateStr()),
         h('button', { class: this.speed === 0 ? 'on' : '', onclick: () => this.setSpeed(0) }, '⏸'),
@@ -340,6 +341,14 @@ window.HOG = window.HOG || {};
     tab_country(body) {
       const sim = this.sim, tag = this.player, c = sim.country(tag), st = sim.stats(tag), cs = sim.g.c[tag];
       body.appendChild(h('div', { class: 'bigflag' }, H.flag.img(c.flag, 96, 64), h('div', null, h('h3', null, c.name), h('div', { class: 'sub' }, 'Ideologie: ' + D.IDEOLOGIES[c.ideology].name))));
+      const sel = h('select', null, Object.keys(D.IDEOLOGIES).map((k) => h('option', { value: k, selected: k === c.ideology }, D.IDEOLOGIES[k].name)));
+      body.appendChild(h('div', { class: 'row' }, 'Ideologie ändern: ', sel, h('button', { onclick: () => {
+        if (sel.value === c.ideology) return;
+        const I = D.IDEOLOGIES[sel.value];
+        U.modal('Ideologie wechseln', h('div', null, h('p', null, 'Wechsel zu ', h('b', null, I.name), '?'), h('p', { class: 'sub' }, 'Folgen: 60 Tage Umbruch – Unruhe +25 in allen Staaten, BIP −20 %, Rüstungsausstoß −25 %, Forschung −20 %, Truppen −10 % Lebenspunkte. Neuer Wechsel erst nach 180 Tagen.'),
+          h('p', { class: 'sub' }, 'Boni: BIP ×' + I.gdp + ' · Rüstung ×' + I.prod + ' · Forschung ×' + I.research + ' · Manpower ×' + I.manpower)), [{ label: 'Abbrechen' }, { label: 'Umsturz!', cls: 'danger', onclick: () => { this.act(sim.changeIdeology(tag, sel.value)); } }]);
+      } }, 'Wechseln')));
+      if (st.upheaval) body.appendChild(h('div', { class: 'bad' }, '🔥 Umbruch: noch ' + st.upheaval + ' Tage (Unruhe, weniger BIP/Rüstung/Forschung)'));
       body.appendChild(h('div', { class: 'row' }, 'Staatsvolk: ', h('b', null, this.ethName(c.main)), ' · Integriert: ', (c.integrated || []).map((e) => this.ethName(e)).join(', ') || '–'));
       body.appendChild(h('div', { class: 'grid2' },
         h('div', null, 'Staaten'), h('b', null, st.states), h('div', null, 'Bevölkerung'), h('b', null, U.fmtPop(st.popTotal)),
@@ -442,9 +451,11 @@ window.HOG = window.HOG || {};
     techText(t) {
       const e = t.effects, out = [];
       if (e.unlock) out.push('Schaltet ' + D.UNITS[e.unlock].name + ' frei');
-      ['atk', 'def', 'hp', 'speed'].forEach((k) => { if (e[k]) for (const u in e[k]) out.push('+' + Math.round(e[k][u] * 100) + '% ' + { atk: 'Angriff', def: 'Verteidigung', hp: 'HP', speed: 'Tempo' }[k] + ' ' + D.UNITS[u].name); });
+      ['atk', 'def', 'hp', 'speed'].forEach((k) => { if (e[k]) { const names = Object.keys(e[k]); const same = names.length > 1 && names.every((n) => e[k][n] === e[k][names[0]]); if (same) out.push('+' + Math.round(e[k][names[0]] * 100) + '% ' + { atk: 'Angriff', def: 'Verteidigung', hp: 'HP', speed: 'Tempo' }[k] + ' ' + (names[0] === 'destroyer' ? 'Schiffe' : 'mehrerer Einheiten')); else names.forEach((u) => out.push('+' + Math.round(e[k][u] * 100) + '% ' + { atk: 'Angriff', def: 'Verteidigung', hp: 'HP', speed: 'Tempo' }[k] + ' ' + (u === 'all' ? 'alle Einheiten' : D.UNITS[u].name))); } });
       const names = { gdp: 'BIP', civ: 'Bautempo', mil: 'Rüstungsausstoß', research: 'Forschung', energy: 'Energie', resource: 'Ressourcen', manpower: 'Manpower' };
-      for (const k in names) if (e[k]) out.push('+' + Math.round(e[k] * 100) + '% ' + names[k]);
+      for (const k in names) if (e[k]) out.push((e[k] > 0 ? '+' : '') + Math.round(e[k] * 100) + '% ' + names[k]);
+      if (e.stab) out.push('−' + e.stab + ' Unruhe in allen Staaten');
+      if (e.assim) out.push('+' + Math.round(e.assim * 100) + '% Assimilation von Minderheiten');
       return out.join(', ');
     }
 
