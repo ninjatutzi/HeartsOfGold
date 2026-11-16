@@ -56,7 +56,7 @@ exports.ETH = {
   Lwiw: { ua: 55, pl: 40, de: 5 }, Wolhynien: { ua: 70, pl: 25, de: 5 }, Brest: { by: 55, pl: 35, ua: 10 }, Grodno: { by: 45, pl: 45, lt: 10 }, Vilnius: { pl: 60, lt: 15, by: 25 },
   Transkarpatien: { ua: 60, hu: 15, sk: 15, cz: 10 }, Prag: { cz: 90, de: 10 }, Nordböhmen: { cz: 35, de: 65 }, Westböhmen: { cz: 50, de: 50 }, Südböhmen: { cz: 70, de: 30 }, Ostböhmen: { cz: 80, de: 20 },
   Mähren: { cz: 70, de: 25, sk: 5 }, Nordmähren: { cz: 70, de: 20, pl: 10 }, Bratislava: { sk: 60, hu: 20, de: 20 }, Nordwestslowakei: { sk: 90, cz: 5, hu: 5 }, Mittelslowakei: { sk: 85, hu: 10, de: 5 }, Ostslowakei: { sk: 60, ua: 20, hu: 15, de: 5 },
-  Südtirol: { de: 70, it: 30 }, Friaul: { it: 75, sl: 25 }, Istrien: { it: 45, hr: 45, sl: 10 }, Küstenland: { sl: 50, it: 50 }, Dalmatien: { hr: 90, it: 10 },
+  Südtirol: { at: 70, it: 30 }, Friaul: { it: 75, sl: 25 }, Istrien: { it: 45, hr: 45, sl: 10 }, Küstenland: { sl: 50, it: 50 }, Dalmatien: { hr: 90, it: 10 },
   Kosovo: { al: 75, sr: 25 }, Vojvodina: { sr: 45, hu: 25, de: 20, ro: 5, hr: 5 }, Slowenien: { sl: 92, de: 5, hr: 3 }, Ljubljana: { sl: 92, de: 5, hr: 3 }, Maribor: { sl: 85, de: 15 },
   Skopje: { sr: 70, al: 30 }, Bitola: { sr: 85, al: 15 }, Sarajevo: { bs: 50, sr: 30, hr: 20 }, 'Banja Luka': { sr: 60, bs: 30, hr: 10 }, Herzegowina: { hr: 55, bs: 35, sr: 10 }, Tuzla: { bs: 70, hr: 15, sr: 15 },
   Chișinău: { ro: 55, ua: 15, ru: 15, md: 15 }, Nordmoldau: { ro: 45, ua: 30, ru: 15, md: 10 }, Nordsiebenbürgen: { ro: 60, hu: 28, de: 12 }, Südsiebenbürgen: { ro: 65, hu: 20, de: 15 }, Banat: { ro: 55, hu: 15, de: 20, sr: 10 }, Kreischgebiet: { ro: 60, hu: 36, de: 4 },
