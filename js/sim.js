@@ -11,6 +11,7 @@ window.HOG = window.HOG || {};
       this.rnd = U.rng((g.seed || 1) + g.day * 7919);
       for (const id in world.provinces) { const p = world.provinces[id]; p.terrain = p.terrain || 'plains'; }
       for (const t in world.countries) { const c = world.countries[t]; c.law = c.law || 'limited'; c.policies = c.policies || {}; }
+      for (const t in g.c) g.c[t].armies = g.c[t].armies || [];
       this.buildIndex();
       this.techById = {};
       D.TECHS.forEach((t) => (this.techById[t.id] = t));
@@ -28,7 +29,7 @@ window.HOG = window.HOG || {};
       };
       const sim = new Sim(world, g);
       for (const tag in world.countries) {
-        g.c[tag] = { money: 300, manpower: 0, equip: { rifles: 30, guns: 8 }, imports: {}, research: { done: [], cur: [], prog: {} }, lines: [], train: [], build: [], lawDay: -999 };
+        g.c[tag] = { money: 300, manpower: 0, equip: { rifles: 30, guns: 8 }, imports: {}, research: { done: [], cur: [], prog: {} }, lines: [], train: [], build: [], armies: [], lawDay: -999 };
         if (world.startTechs) { g.c[tag].research.done = world.startTechs.slice(); sim.recalcMods(tag); }
         const st = sim.stats(tag);
         g.c[tag].manpower = Math.round(st.manCap * 0.6);
@@ -457,6 +458,102 @@ window.HOG = window.HOG || {};
       return v + (this.st[tag] ? this.st[tag].pp * 15 : 0);
     }
 
+    // ---------- Armeen (Fronten & Angriffe) ----------
+    createArmy(tag) {
+      const c = this.g.c[tag]; if (c.armies.length >= 12) return null;
+      c.armyCount = (c.armyCount || 0) + 1;
+      const a = { id: this.g.nextId++, name: 'Armee ' + c.armyCount, color: D.ARMY_COLORS[(c.armyCount - 1) % D.ARMY_COLORS.length], front: null, order: null };
+      c.armies.push(a); return a;
+    }
+    deleteArmy(tag, id) {
+      const c = this.g.c[tag];
+      this.g.units.forEach((u) => { if (u.owner === tag && u.army === id) u.army = null; });
+      c.armies = c.armies.filter((a) => a.id !== id);
+    }
+    armyUnits(tag, id) { return this.g.units.filter((u) => u.owner === tag && u.army === id); }
+    addToArmy(tag, id, unitIds) {
+      const set = new Set(unitIds);
+      this.g.units.forEach((u) => { if (u.owner === tag && set.has(u.id)) { u.army = id; u.dest = null; } });
+    }
+    // Spieler bewegt Einheiten von Hand: komplette Armee -> Befehle gelöscht, Teilmenge -> verlässt die Armee
+    releaseFromArmies(tag, unitIds) {
+      const set = new Set(unitIds);
+      this.g.c[tag].armies.forEach((a) => {
+        const mine = this.armyUnits(tag, a.id);
+        const moved = mine.filter((u) => set.has(u.id));
+        if (!moved.length) return;
+        if (moved.length === mine.length) { a.front = null; a.order = null; mine.forEach((u) => (u.dest = null)); }
+        else moved.forEach((u) => { u.army = null; u.dest = null; });
+      });
+    }
+    setFront(tag, id, touched) {
+      const a = this.g.c[tag].armies.find((x) => x.id === id); if (!a) return 'Armee nicht gefunden.';
+      const own = [], foes = new Set();
+      const foreign = (c) => c && c !== tag && !this.allied(tag, c);
+      touched.forEach((pid) => { if (this.isWater(pid)) return; const c = this.controller(pid); if (c === tag) own.push(pid); else if (foreign(c)) foes.add(c); });
+      own.forEach((pid) => this.adj[pid].forEach((n) => { if (this.isWater(n)) return; const c = this.controller(n); if (foreign(c)) foes.add(c); }));
+      let base = own;
+      if (!base.length) { const b = new Set(); touched.forEach((pid) => this.adj[pid] && this.adj[pid].forEach((n) => { if (!this.isWater(n) && this.controller(n) === tag) b.add(n); })); base = [...b]; }
+      if (!foes.size || !base.length) return 'Keine Grenze gefunden – zeichne entlang der Grenze zu einem Nachbarland.';
+      a.front = { base, foes: [...foes], tiles: [] }; a.order = null;
+      this.manageArmy(tag, a);
+      return null;
+    }
+    setAttack(tag, id, targets) {
+      const a = this.g.c[tag].armies.find((x) => x.id === id); if (!a) return 'Armee nicht gefunden.';
+      const t = targets.filter((pid) => { const c = this.controller(pid); return c && this.atWar(tag, c); });
+      if (!t.length) return 'Wähle Provinzen eines Landes, mit dem du im Krieg bist.';
+      a.order = { kind: 'attack', targets: t }; this.manageArmy(tag, a);
+      return null;
+    }
+    clearArmyOrders(tag, id) {
+      const a = this.g.c[tag].armies.find((x) => x.id === id); if (!a) return;
+      a.front = null; a.order = null; this.armyUnits(tag, id).forEach((u) => { u.dest = null; });
+    }
+    // Eigene Grenzprovinzen entlang der gezeichneten Front – folgt der Grenze dynamisch
+    frontTiles(tag, front) {
+      const foes = new Set(front.foes);
+      const mine = (pid) => !this.isWater(pid) && this.controller(pid) === tag;
+      const borders = (pid) => { for (const n of this.adj[pid]) if (!this.isWater(n) && foes.has(this.controller(n))) return true; return false; };
+      const search = (base, H) => {
+        const dist = new Map(), q = [];
+        base.forEach((b) => { if (mine(b)) { dist.set(b, 0); q.push(b); } });
+        for (let i = 0; i < q.length; i++) { const cur = q[i], d = dist.get(cur); if (d >= H) continue; for (const n of this.adj[cur]) if (!dist.has(n) && mine(n)) { dist.set(n, d + 1); q.push(n); } }
+        return [...dist.keys()].filter(borders);
+      };
+      let tiles = search(front.base, 3);
+      for (let k = 0; k < 3 && !tiles.length && front.tiles.length; k++) { front.base = front.tiles.filter(mine).concat(front.base.filter(mine)); tiles = search(front.base, 3 + k); }
+      if (tiles.length) { front.tiles = tiles; if (front.base.length > 40) front.base = tiles.slice(); }
+      return front.tiles.filter(mine);
+    }
+    // Einheiten gleichmäßig auf Kacheln verteilen (z. B. 8 Truppen auf 4 Kacheln = 2 pro Kachel)
+    distribute(units, tiles) {
+      if (!tiles.length || !units.length) return;
+      const cap = Math.ceil(units.length / tiles.length), load = new Map(tiles.map((t) => [t, 0])), left = [];
+      units.forEach((u) => {
+        const want = u.dest && load.has(u.dest) ? u.dest : !u.dest && load.has(u.prov) ? u.prov : null;
+        if (want && load.get(want) < cap) { load.set(want, load.get(want) + 1); u.dest = want; } else left.push(u);
+      });
+      left.forEach((u) => {
+        let best = null, bd = Infinity; const a = this.pc[u.prov];
+        tiles.forEach((t) => { if (load.get(t) >= cap) return; const b = this.pc[t], d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (d < bd) { bd = d; best = t; } });
+        if (!best) best = tiles[0];
+        load.set(best, load.get(best) + 1); u.dest = best; u.path = []; u.prog = 0;
+      });
+      units.forEach((u) => { if (u.dest && u.prov !== u.dest && (!u.path.length || u.path[u.path.length - 1] !== u.dest)) this.orderMove([u.id], u.dest); });
+    }
+    manageArmy(tag, a) {
+      const units = this.armyUnits(tag, a.id).filter((u) => this.kindOf(u) === 'land' && !this.isEmbarked(u));
+      if (a.order && a.order.kind === 'attack') {
+        const targets = a.order.targets.filter((pid) => { const c = this.controller(pid); return c && this.atWar(tag, c); });
+        a.order.targets = targets;
+        if (!targets.length) { a.order = null; units.forEach((u) => (u.dest = null)); if (tag === this.g.player) this.logMsg('✔ ' + a.name + ': Angriff abgeschlossen.', [tag]); }
+        else { this.distribute(units, targets); return; }
+      }
+      if (a.front) this.distribute(units, this.frontTiles(tag, a.front));
+    }
+    manageArmies(tag) { const c = this.g.c[tag]; if (c && c.armies && c.armies.length) c.armies.forEach((a) => this.manageArmy(tag, a)); }
+
     // ---------- Tick ----------
     tick() {
       const g = this.g;
@@ -467,6 +564,7 @@ window.HOG = window.HOG || {};
       const tags = Object.keys(this.world.countries).filter((t) => this.isAlive(t));
       tags.forEach((t) => this.stats(t));
       tags.forEach((t) => this.economy(t));
+      if (g.day % 2 === 0) tags.forEach((t) => this.manageArmies(t));
       this.population();
       this.movement();
       this.combat();
@@ -647,11 +745,15 @@ window.HOG = window.HOG || {};
           const ctrl = this.controller(pid);
           const occ = list.find((u) => this.kindOf(u) === 'land' && ctrl !== u.owner && !this.allied(u.owner, ctrl) && this.atWar(u.owner, ctrl));
           if (occ) {
-            const st = this.world.states[p.state];
-            p.occupier = occ.owner === st.owner ? null : occ.owner;
-            this.updateStateOcc(st);
-            this.bordersChanged = true;
-          }
+            if (p.capBy === occ.owner) p.capDays = (p.capDays || 0) + 1; else { p.capBy = occ.owner; p.capDays = 1; }
+            if (p.capDays >= D.CAPTURE_DAYS + (p.city ? 1 : 0)) {
+              const st = this.world.states[p.state];
+              p.occupier = occ.owner === st.owner ? null : occ.owner;
+              p.capBy = null; p.capDays = 0;
+              this.updateStateOcc(st);
+              this.bordersChanged = true;
+            }
+          } else if (p.capDays) { p.capBy = null; p.capDays = 0; }
         }
         list.forEach((u) => {
           const mx = this.maxHp(u);

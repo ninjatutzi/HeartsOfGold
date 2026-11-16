@@ -78,35 +78,55 @@ window.HOG = window.HOG || {};
     }
   };
 
+  // KI-Heer: geschlossener Aufmarsch an einer Aufstellungsprovinz, dann Vorstoß auf EIN Ziel – kein Zerstreuen
   AI.military = function (sim, tag) {
-    const enemies = sim.enemies(tag);
-    if (!enemies.length) return;
-    const units = sim.g.units.filter((u) => u.owner === tag);
-    if (!units.length) return;
-    const P = sim.world.provinces, cap = sim.capitalProv(tag);
-    if (!cap) return;
-    // Frontlinie: feindliche Provinzen neben meinen/verbündeten Provinzen
-    const targets = [], frontOwn = [];
+    const enemies = sim.enemies(tag), g = sim.g;
+    g.ai = g.ai || {};
+    if (!enemies.length) { delete g.ai[tag]; return; }
+    const st = g.ai[tag] || (g.ai[tag] = { target: null, stage: null, since: g.day });
+    const units = g.units.filter((u) => u.owner === tag && sim.kindOf(u) === 'land' && !sim.isEmbarked(u));
+    if (!units.length || !sim.capitalProv(tag)) return;
+    const P = sim.world.provinces;
+    const isEnemy = (pid) => enemies.includes(sim.controller(pid));
+    if (st.target && !isEnemy(st.target)) { st.target = null; st.stage = null; }
+    let cx = 0, cy = 0; units.forEach((u) => { cx += sim.pc[u.prov][0]; cy += sim.pc[u.prov][1]; }); cx /= units.length; cy /= units.length;
+    const dist = (pid) => Math.hypot(sim.pc[pid][0] - cx, sim.pc[pid][1] - cy);
+    const frontOwn = [];
     for (const pid in P) {
-      const c = sim.controller(pid);
-      if (enemies.includes(c)) {
-        for (const n of sim.adj[pid]) { const cn = sim.controller(n); if (cn === tag || sim.allied(tag, cn)) { targets.push(pid); break; } }
-      } else if (c === tag) {
-        for (const n of sim.adj[pid]) if (enemies.includes(sim.controller(n))) { frontOwn.push(pid); break; }
-      }
+      if (U_isWater(P[pid]) || sim.controller(pid) !== tag) continue;
+      for (const n of sim.adj[pid]) if (isEnemy(n)) { frontOwn.push(pid); break; }
     }
-    if (!targets.length) return;
-    const cc = sim.pc[cap];
-    targets.sort((a, b) => Math.hypot(sim.pc[a][0] - cc[0], sim.pc[a][1] - cc[1]) - Math.hypot(sim.pc[b][0] - cc[0], sim.pc[b][1] - cc[1]));
-    const target = targets[0];
-    let defIdx = 0;
-    units.forEach((u, i) => {
-      if (u.path.length) return;
-      const def = frontOwn.length && i % 3 === 0 && !D.UNITS[u.type].air;
-      const dest = def ? frontOwn[defIdx++ % frontOwn.length] : target;
-      if (u.prov !== dest) sim.orderMove([u.id], dest);
+    if (!st.target) {
+      let best = null, bd = Infinity;
+      for (const pid in P) {
+        if (U_isWater(P[pid]) || !isEnemy(pid)) continue;
+        let near = false; for (const n of sim.adj[pid]) if (sim.controller(n) === tag) { near = true; break; }
+        if (near && dist(pid) < bd) { bd = dist(pid); best = pid; }
+      }
+      if (!best) return;
+      st.target = best; st.since = g.day;
+      let stage = null, sd = Infinity;
+      for (const n of sim.adj[best]) if (!U_isWater(P[n]) && sim.controller(n) === tag && dist(n) < sd) { sd = dist(n); stage = n; }
+      st.stage = stage;
+    }
+    if (!st.stage) return;
+    // 25 % bleiben als Grenzwache, 75 % bilden die Stoßgruppe
+    const offense = units.filter((u, i) => i % 4 !== 3), defense = units.filter((u, i) => i % 4 === 3);
+    let di = 0;
+    defense.forEach((u) => {
+      if (u.path.length || !frontOwn.length) return;
+      const dest = frontOwn[di++ % frontOwn.length];
+      if (u.prov !== dest && u.dest !== dest) { u.dest = dest; sim.orderMove([u.id], dest); }
+    });
+    const atStage = offense.filter((u) => u.prov === st.stage || u.prov === st.target).length;
+    const ready = (atStage >= Math.ceil(offense.length * 0.8) && g.day - st.since >= 5) || g.day - st.since > 20;
+    offense.forEach((u) => {
+      const want = ready && (u.prov === st.stage || u.prov === st.target) ? st.target : st.stage;
+      if (u.prov === want || (u.path.length && u.dest === want)) return;
+      u.dest = want; sim.orderMove([u.id], want);
     });
   };
+  const U_isWater = (p) => p && p.terrain === 'water';
 
   AI.maybeWar = function (sim, tag) {
     const aggr = sim.g.opts.aggression;

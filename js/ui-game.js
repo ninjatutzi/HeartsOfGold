@@ -13,6 +13,7 @@ window.HOG = window.HOG || {};
       this.sel = { prov: null, ids: new Set() };
       this.timer = null; this.lastRender = 0; this.lastLog = null;
       this.keyHandler = (e) => this.onKey(e);
+      this.armySel = null; this.armyMode = null; this.attackSel = new Set(); this.drawPts = null; this.drawProvs = null;
       this.bindHooks();
     }
 
@@ -20,6 +21,7 @@ window.HOG = window.HOG || {};
       this.sim = sim;
       this.player = sim.g.player;
       this.speed = 0; this.sel = { prov: null, ids: new Set() };
+      this.armySel = null; this.armyMode = null; this.attackSel = new Set(); this.drawPts = null; this.drawProvs = null;
       this.lastLog = sim.g.log[0] || null;
       this.running = true;
       this.view.setWorld(sim.world);
@@ -69,14 +71,45 @@ window.HOG = window.HOG || {};
       v.hooks.overlay = (ctx) => this.drawOverlay(ctx);
       v.hooks.click = (e, x, y) => {
         const p = v.hit(x, y);
+        if (this.armyMode === 'attack' && this.armySel) {
+          if (!p) return;
+          const c = this.sim.controller(p.id);
+          if (!c || !this.sim.atWar(this.player, c)) { this.toast('Wähle Provinzen eines Landes, mit dem du im Krieg bist.'); return; }
+          if (this.attackSel.has(p.id)) this.attackSel.delete(p.id); else this.attackSel.add(p.id);
+          this.view.redraw(); this.renderArmyBar(); return;
+        }
         this.selectProv(p ? p.id : null, !e.shiftKey);
+      };
+      // Grenze zeichnen: Front-Modus aktiv, rechte Maustaste gedrückt halten und über die Grenze ziehen
+      v.hooks.down = (e, x, y) => {
+        if (this.armyMode === 'front' && this.armySel && e.button === 2) {
+          this.drawPts = [[x, y]]; this.drawProvs = new Set(); this.touch(x, y); this.view.redraw(); return true;
+        }
+        return false;
+      };
+      v.hooks.move = (e, x, y) => {
+        if (!this.drawPts) return;
+        const l = this.drawPts[this.drawPts.length - 1], d = Math.hypot(x - l[0], y - l[1]), n = Math.max(1, Math.ceil(d / 5));
+        for (let i = 1; i <= n; i++) this.touch(l[0] + ((x - l[0]) * i) / n, l[1] + ((y - l[1]) * i) / n);
+        this.drawPts.push([x, y]); this.view.redraw();
+      };
+      v.hooks.up = () => {
+        if (!this.drawPts) return;
+        const provs = [...this.drawProvs]; this.drawPts = null; this.drawProvs = null;
+        const err = this.sim.setFront(this.player, this.armySel, provs);
+        if (err) this.toast(err); else { this.toast('Grenze gezeichnet – die Armee verteilt sich gleichmäßig und folgt der Grenze.'); this.armyMode = null; }
+        this.view.redraw(); this.renderArmyBar();
       };
       v.hooks.rclick = (e, x, y) => {
         const p = v.hit(x, y); if (!p || !this.sel.ids.size) return;
+        this.sim.releaseFromArmies(this.player, [...this.sel.ids]);
         const n = this.sim.orderMove([...this.sel.ids], p.id);
         if (!n) this.toast('Dorthin gibt es keinen Weg (Grenzen geschlossen).');
         v.redraw();
       };
+    }
+    touch(x, y) {
+      const p = this.view.hit(x, y); if (p && !U.isWater(p)) this.drawProvs.add(p.id);
     }
     selectProv(pid, autoUnits) {
       const sim = this.sim;
@@ -95,6 +128,40 @@ window.HOG = window.HOG || {};
         ctx.lineWidth = 1.6 / z; ctx.strokeStyle = 'rgba(255,255,255,0.8)';
         st.provinces.forEach((pid) => ctx.stroke(v.cache(w.provinces[pid]).path));
         ctx.lineWidth = 2.6 / z; ctx.strokeStyle = '#ffd24a'; ctx.stroke(v.cache(p).path);
+      }
+      // Armeen (Farben sieht nur der Spieler)
+      const armies = sim.g.c[this.player].armies;
+      armies.forEach((a) => {
+        const selA = a.id === this.armySel;
+        const tiles = a.order && a.order.kind === 'attack' ? [] : a.front ? a.front.tiles : [];
+        if (tiles.length) {
+          ctx.save(); ctx.globalAlpha = selA ? 0.32 : 0.2; ctx.fillStyle = a.color;
+          tiles.forEach((pid) => ctx.fill(v.cache(w.provinces[pid]).path));
+          ctx.globalAlpha = 1; ctx.strokeStyle = a.color; ctx.lineWidth = (selA ? 3.4 : 2.4) / z;
+          tiles.forEach((pid) => ctx.stroke(v.cache(w.provinces[pid]).path)); ctx.restore();
+        }
+        if (a.order && a.order.kind === 'attack') {
+          const us = sim.armyUnits(this.player, a.id); if (!us.length) return;
+          let cx = 0, cy = 0; us.forEach((u) => { cx += sim.pc[u.prov][0]; cy += sim.pc[u.prov][1]; }); cx /= us.length; cy /= us.length;
+          ctx.save(); ctx.strokeStyle = a.color; ctx.fillStyle = a.color; ctx.lineWidth = 3 / z;
+          a.order.targets.forEach((pid) => {
+            ctx.globalAlpha = 0.28; ctx.fill(v.cache(w.provinces[pid]).path); ctx.globalAlpha = 1; ctx.stroke(v.cache(w.provinces[pid]).path);
+            const t = sim.pc[pid], ang = Math.atan2(t[1] - cy, t[0] - cx), hs = 9 / z;
+            ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(t[0], t[1]); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(t[0], t[1]); ctx.lineTo(t[0] - Math.cos(ang - 0.4) * hs, t[1] - Math.sin(ang - 0.4) * hs); ctx.lineTo(t[0] - Math.cos(ang + 0.4) * hs, t[1] - Math.sin(ang + 0.4) * hs); ctx.closePath(); ctx.fill();
+          });
+          ctx.restore();
+        }
+      });
+      if (this.armyMode === 'attack') {
+        ctx.save(); ctx.strokeStyle = '#ff3b30'; ctx.fillStyle = '#ff3b30'; ctx.lineWidth = 3 / z;
+        this.attackSel.forEach((pid) => { const c = v.cache(w.provinces[pid]).path; ctx.globalAlpha = 0.35; ctx.fill(c); ctx.globalAlpha = 1; ctx.stroke(c); });
+        ctx.restore();
+      }
+      if (this.drawPts && this.drawPts.length) {
+        const a = armies.find((x) => x.id === this.armySel);
+        ctx.save(); ctx.strokeStyle = a ? a.color : '#fff'; ctx.lineWidth = 5 / z; ctx.lineCap = 'round'; ctx.beginPath();
+        this.drawPts.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.stroke(); ctx.restore();
       }
       // Wege
       ctx.setLineDash([5 / z, 4 / z]); ctx.lineWidth = 1.6 / z; ctx.strokeStyle = '#fff';
@@ -119,6 +186,7 @@ window.HOG = window.HOG || {};
           const embarked = list.every((u) => sim.isEmbarked(u));
           ctx.save(); ctx.translate(c[0], c[1]); ctx.scale(1 / z, 1 / z); ctx.translate(off - bw / 2, -bh / 2 - 3);
           ctx.fillStyle = '#1b2430'; ctx.fillRect(0, 0, bw, bh);
+          if (o === this.player) { const au = list.find((u) => u.army), ar = au && armies.find((x) => x.id === au.army); if (ar) { ctx.fillStyle = ar.color; ctx.fillRect(0, -5, bw, 4); } }
           ctx.drawImage(H.flag.sprite(country.flag, 24, 16), 0, 0, 24, bh);
           H.flag.unitIcon(ctx, dom.type, 33, 8, 14, embarked);
           ctx.lineWidth = sel ? 2.5 : 1.2; ctx.strokeStyle = sel ? '#ffd24a' : '#000'; ctx.strokeRect(0, 0, bw, bh);
@@ -195,7 +263,7 @@ window.HOG = window.HOG || {};
       if (!this.running || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || !$('#modal').hidden) return;
       if (e.code === 'Space') { e.preventDefault(); this.setSpeed(this.speed ? 0 : (this.lastSpeed || 2)); }
       else if (/^[1-4]$/.test(e.key)) { this.lastSpeed = +e.key; this.setSpeed(+e.key); }
-      else if (e.key === 'Escape') this.selectProv(null);
+      else if (e.key === 'Escape') { this.armyMode = null; this.attackSel = new Set(); this.drawPts = null; this.selectProv(null); this.renderArmyBar(); }
     }
     toast(text) {
       const box = $('#eventlog'), t = h('div', { class: 'toast' }, text);
@@ -227,6 +295,57 @@ window.HOG = window.HOG || {};
         h('button', { onclick: () => H.app.gameMenu() }, '☰ Menü'));
       top.appendChild(sp);
       this.renderWarbar();
+      this.renderArmyBar();
+    }
+    // ---------- Armeeleiste ----------
+    selectArmy(id) {
+      this.armySel = id; this.armyMode = null; this.attackSel = new Set();
+      this.sel.ids = new Set(this.sim.armyUnits(this.player, id).map((u) => u.id));
+      this.view.redraw(); this.renderArmyBar(); this.renderSide();
+    }
+    armyRight(id) {
+      const mine = new Set(this.sim.armyUnits(this.player, id).map((u) => u.id));
+      const add = [...this.sel.ids].filter((x) => !mine.has(x));
+      if (add.length) {
+        this.sim.addToArmy(this.player, id, add);
+        this.toast(add.length + ' Einheit(en) zur Armee hinzugefügt.');
+        this.sim.manageArmy(this.player, this.sim.g.c[this.player].armies.find((a) => a.id === id));
+        this.sel.ids = new Set(this.sim.armyUnits(this.player, id).map((u) => u.id));
+        this.armySel = id; this.view.redraw(); this.renderArmyBar(); this.renderSide();
+      } else this.selectArmy(id);
+    }
+    renderArmyBar() {
+      if (!this.running) return;
+      const sim = this.sim, tag = this.player, box = $('#armybar'), c = sim.g.c[tag];
+      const sig = c.armies.map((a) => a.id + ':' + sim.armyUnits(tag, a.id).length + ':' + (a.order ? 'o' + a.order.targets.length : a.front ? 'f' + a.front.tiles.length : '-')).join('|') + '#' + this.armySel + this.armyMode + this.attackSel.size;
+      if (sig === this._armySig && box.childNodes.length) return;
+      this._armySig = sig;
+      box.innerHTML = '';
+      c.armies.forEach((a, i) => {
+        const units = sim.armyUnits(tag, a.id), sel = this.armySel === a.id;
+        const comp = {}; units.forEach((u) => (comp[u.type] = (comp[u.type] || 0) + 1));
+        const tip = a.name + ' – ' + (units.length ? Object.keys(comp).map((k) => comp[k] + '× ' + D.UNITS[k].name).join(', ') : 'leer') +
+          (a.order ? '\nBefehl: Angriff auf ' + a.order.targets.length + ' Provinz(en)' : a.front ? '\nBefehl: Grenze halten (' + a.front.tiles.length + ' Provinzen)' : '') +
+          '\nLinksklick: wählen · Rechtsklick: ausgewählte Truppen hinzufügen';
+        const btn = h('button', { class: 'army' + (sel ? ' on' : ''), style: { borderColor: a.color }, title: tip, onclick: () => this.selectArmy(a.id), oncontextmenu: (e) => { e.preventDefault(); this.armyRight(a.id); } },
+          h('span', { class: 'asw', style: { background: a.color } }, String(i + 1)), h('span', { class: 'acount' }, units.length));
+        const wrap = h('div', { class: 'armywrap' + (sel ? ' sel' : '') }, btn);
+        if (sel) {
+          const tools = h('div', { class: 'armytools' },
+            h('button', { class: this.armyMode === 'front' ? 'on' : '', title: 'Grenze zeichnen: Rechte Maustaste gedrückt halten und entlang der Grenze zu einem Land ziehen', onclick: () => { this.armyMode = this.armyMode === 'front' ? null : 'front'; this.attackSel = new Set(); if (this.armyMode) this.toast('Grenze zeichnen: Rechte Maustaste gedrückt halten und über die Grenze ziehen.'); this.view.redraw(); this.renderArmyBar(); } }, '🧭'),
+            h('button', { class: this.armyMode === 'attack' ? 'on' : '', title: 'Angriff: Provinzen des Feindes anklicken, dann ✔ drücken', onclick: () => { this.armyMode = this.armyMode === 'attack' ? null : 'attack'; this.attackSel = new Set(); if (this.armyMode) this.toast('Angriff: Feindliche Provinzen anklicken (mehrere möglich), dann ✔ drücken.'); this.view.redraw(); this.renderArmyBar(); } }, '➡️'));
+          if (this.armyMode === 'attack') tools.appendChild(h('button', { title: 'Angriff starten', disabled: !this.attackSel.size, onclick: () => { const err = sim.setAttack(tag, a.id, [...this.attackSel]); if (err) this.toast(err); else { this.toast('Angriff befohlen: ' + a.name + ' rückt vor.'); this.armyMode = null; this.attackSel = new Set(); } this.view.redraw(); this.renderArmyBar(); } }, '✔'));
+          if (a.front || a.order) tools.appendChild(h('button', { title: 'Befehle der Armee löschen', onclick: () => { sim.clearArmyOrders(tag, a.id); this.view.redraw(); this.renderArmyBar(); } }, '🚫'));
+          tools.appendChild(h('button', { title: 'Armee auflösen', onclick: () => { sim.deleteArmy(tag, a.id); this.armySel = null; this.armyMode = null; this.view.redraw(); this.renderArmyBar(); } }, '🗑'));
+          wrap.appendChild(tools);
+        }
+        box.appendChild(wrap);
+      });
+      box.appendChild(h('button', { class: 'army plus', title: 'Neue Armee erstellen (ausgewählte Truppen werden hinzugefügt)', onclick: () => {
+        const a = sim.createArmy(tag); if (!a) { this.toast('Maximal 12 Armeen.'); return; }
+        if (this.sel.ids.size) sim.addToArmy(tag, a.id, [...this.sel.ids]);
+        this.selectArmy(a.id);
+      } }, '＋'));
     }
     renderWarbar() {
       const sim = this.sim, tag = this.player, box = $('#warbar');

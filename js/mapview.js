@@ -244,7 +244,7 @@ window.HOG = window.HOG || {};
       cv.addEventListener('pointerdown', (e) => {
         const [sx, sy] = pos(e), [wx, wy] = this.toWorld(sx, sy);
         cv.setPointerCapture(e.pointerId);
-        if (e.button === 0 && this.hooks.down && this.hooks.down(e, wx, wy) === true) { this.dragging = { custom: true }; return; }
+        if (this.hooks.down && this.hooks.down(e, wx, wy) === true) { this.dragging = { custom: true }; return; }
         pan = { sx, sy, cx: this.cam.x, cy: this.cam.y, moved: false, button: e.button };
       });
       cv.addEventListener('pointermove', (e) => {

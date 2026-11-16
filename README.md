@@ -28,6 +28,13 @@ Die beiden Europa-Karten erzeugt `tools/gen-europe.js` (Daten in `tools/europe-d
 - **Ideologien:** Demokratisch, Faschistisch, Kommunistisch, Monarchistisch (mit unterschiedlichen Boni). Im Spiel wechselbar (Reiter „Land“) – das löst 60 Tage Umbruch aus: Unruhe +25, BIP −20 %, Rüstung −25 %, Forschung −20 %, Truppen −10 % HP; danach 180 Tage Sperre. Jedes Land hat eine Flagge (im Editor gestaltbar).
 - **Allianzen:** Bündnispartner treten Kriegen automatisch bei. KI-Länder bauen, forschen, rüsten, erklären Kriege und schließen Frieden.
 
+### Armeen (wie in HOI4)
+- Unten mittig: **＋** erstellt eine Armee (ausgewählte Truppen kommen hinein). Mehrere Armeen möglich, jede hat eine Farbe, die nur du siehst (Streifen am Truppen-Marker, Umrandung der Front).
+- **Rechtsklick auf eine Armee** mit ausgewählten Truppen = Truppen hinzufügen; Linksklick = Armee wählen.
+- **🧭 Grenze:** Modus anschalten, rechte Maustaste gedrückt halten und entlang der Grenze zu einem Land ziehen. Die Armee verteilt sich gleichmäßig auf die Grenzprovinzen (8 Truppen auf 4 Provinzen = je 2) und die Front passt sich dynamisch an, wenn sich die Grenze verschiebt.
+- **➡️ Angriff:** Modus anschalten, eine oder mehrere feindliche Provinzen anklicken, **✔** drücken – die Armee verteilt sich auf diese Provinzen und greift an. 🚫 löscht Befehle, 🗑 löst die Armee auf.
+- Provinzen werden erst nach ein paar Tagen ungestörter Anwesenheit besetzt. Die KI marschiert geschlossen auf (Aufstellung, dann Vorstoß auf ein Ziel) und zerstreut sich nicht.
+
 ### Steuerung
 Klick = Provinz wählen (eigene Truppen werden mitgewählt) · Rechtsklick = Truppen bewegen · Mausrad = Zoom · Ziehen = Karte verschieben · Leertaste = Pause · 1–4 = Geschwindigkeit.
 
