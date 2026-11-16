@@ -278,6 +278,23 @@ for (const tag in countries) {
   own.forEach((st) => { st.slots = st.buildings.civ + st.buildings.mil + st.buildings.power + Math.max(2, Math.round(st.gdp / 250)); });
 }
 
+// ---- Ressourcen: Stahl überwiegt, andere Rohstoffe nur moderat aufstocken ----
+for (const tag in countries) {
+  const own = Object.values(states).filter((st) => st.owner === tag).sort((x, y) => y.gdp - x.gdp);
+  if (!own.length) continue;
+  const mil = own.reduce((a, st) => a + st.buildings.mil, 0);
+  const topUp = (res, target, cap) => {
+    let have = own.reduce((a, st) => a + (st.resources[res] || 0), 0);
+    for (let i = 0, guard = 0; have < target && guard < 400; i++, guard++) {
+      const st = own[i % own.length];
+      if ((st.resources[res] || 0) >= cap) continue;
+      st.resources[res] = (st.resources[res] || 0) + 1; have++;
+    }
+  };
+  topUp('steel', Math.round(mil * 1.3), 8);
+  if (mil >= 8) { topUp('oil', Math.round(mil * 0.35), 6); topUp('aluminum', Math.round(mil * 0.25), 5); topUp('chromium', Math.round(mil * 0.12), 4); topUp('tungsten', Math.round(mil * 0.08), 3); }
+}
+
 // ---- Welt zusammenbauen ----
 const world = H.worldgen.emptyWorld('Europa ' + MODE);
 world.width = W; world.height = HH; world.startDate = MODE + '-01-01';

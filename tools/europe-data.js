@@ -99,7 +99,7 @@ add('AUT', [
   ['Tirol', 'Innsbruck', 11.4, 47.27, 0.75], ['Vorarlberg', 'Bregenz', 9.75, 47.5, 0.4], ['Steiermark', 'Graz', 15.44, 47.07, 1.25, { at: 95, sl: 5 }, { steel: 3 }], ['Kärnten', 'Klagenfurt', 14.31, 46.62, 0.56, { at: 94, sl: 6 }],
 ]);
 add('ITA', [
-  ['Piemont', 'Turin', 7.69, 45.07, 4.4], ['Ligurien', 'Genua', 8.93, 44.41, 1.5], ['Lombardei', 'Mailand', 9.19, 45.46, 10, null, { steel: 1 }], ['Venetien', 'Venedig', 12.34, 45.44, 4.9], ['Südtirol', 'Bozen', 11.35, 46.5, 1, { it: 35, de: 65 }],
+  ['Piemont', 'Turin', 7.69, 45.07, 4.4], ['Ligurien', 'Genua', 8.93, 44.41, 1.5], ['Lombardei', 'Mailand', 9.19, 45.46, 10, null, { steel: 1 }], ['Venetien', 'Venedig', 12.34, 45.44, 4.9], ['Südtirol', 'Bozen', 11.35, 46.5, 1, { it: 35, at: 65 }],
   ['Friaul', 'Triest', 13.77, 45.65, 1.2, { it: 90, sl: 10 }], ['Emilia-Romagna', 'Bologna', 11.34, 44.5, 4.4], ['Toskana', 'Florenz', 11.25, 43.77, 3.7], ['Marken', 'Ancona', 13.52, 43.62, 2.4],
   ['Latium', 'Rom', 12.5, 41.9, 5.9], ['Abruzzen', 'Pescara', 14.2, 42.46, 1.3], ['Kampanien', 'Neapel', 14.27, 40.85, 5.8], ['Apulien', 'Bari', 16.87, 41.12, 4, null, { steel: 2 }],
   ['Basilikata', 'Potenza', 15.8, 40.64, 0.6, null, { oil: 2 }], ['Kalabrien', 'Reggio', 15.65, 38.11, 1.9], ['Sizilien', 'Palermo', 13.36, 38.12, 5, null, { oil: 1 }], ['Sardinien', 'Cagliari', 9.12, 39.22, 1.6],
