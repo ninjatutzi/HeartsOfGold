@@ -89,6 +89,7 @@ window.HOG = window.HOG || {};
       return n ? [n.q[0], n.q[1]] : [x, y];
     }
     down(e, x, y) {
+      if (e.button !== 0) return false;
       if (this.tool !== 'select' && this.tool !== 'move') return false;
       const sp = this.selProv && this.world.provinces[this.selProv];
       if (!sp) return false;

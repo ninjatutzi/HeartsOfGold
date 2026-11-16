@@ -194,6 +194,9 @@ window.HOG = window.HOG || {};
     { id: 'soc6', branch: 'Gesellschaft', name: 'Gerechte Teilhabe', cost: 620, req: ['soc5'], effects: { stab: 8, gdp: 0.04 } },
   ];
 
+  D.ARMY_COLORS = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', '#008080', '#9a6324'];
+  D.CAPTURE_DAYS = 3; // Tage ungestörter Anwesenheit zum Besetzen einer Provinz (Städte +1)
+
   D.SPEEDS = [0, 900, 450, 180, 60]; // ms pro Tag, 0 = Pause
   D.START_DATE = '1936-01-01';
 
